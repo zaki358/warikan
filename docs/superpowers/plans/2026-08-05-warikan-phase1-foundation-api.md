@@ -81,7 +81,7 @@
 - Consumes: なし
 - Produces: `legacy/app.py` に `calculate_settlements(members)` が残っている（Task 6 が使う）
 
-- [ ] **Step 1: Playwright MCP をプロジェクトに宣言する**
+- [x] **Step 1: Playwright MCP をプロジェクトに宣言する**
 
 `.mcp.json` を作成:
 
@@ -96,7 +96,7 @@
 }
 ```
 
-- [ ] **Step 2: ui-inspector エージェントを作成する**
+- [x] **Step 2: ui-inspector エージェントを作成する**
 
 `.claude/agents/ui-inspector.md`:
 
@@ -162,7 +162,7 @@ tools: Read, Glob, Grep, mcp__playwright__browser_navigate, mcp__playwright__bro
 修正案を書いてもかまいませんが、ファイルを編集してはいけません。
 ```
 
-- [ ] **Step 3: web-debugger エージェントを作成する**
+- [x] **Step 3: web-debugger エージェントを作成する**
 
 `.claude/agents/web-debugger.md`:
 
@@ -209,21 +209,21 @@ tools: Read, Write, Edit, Bash, Glob, Grep, mcp__playwright__browser_navigate, m
 - テストが失敗しているとき、テストの方を都合よく書き換えない
 ```
 
-- [ ] **Step 4: Flask 実装を legacy/ へ移動する**
+- [x] **Step 4: Flask 実装を legacy/ へ移動する**
 
 ```bash
 mkdir -p legacy
 git mv app.py templates data start_warikan.bat legacy/
 ```
 
-- [ ] **Step 5: 移動後も Flask が起動することを確認する**
+- [x] **Step 5: 移動後も Flask が起動することを確認する**
 
 Run: `python legacy/app.py`
 Expected: `Running on http://127.0.0.1:5000` が表示される。ブラウザで開いてトップページが出る。確認後 Ctrl+C で停止。
 
 `DATA_FILE` は `os.path.dirname(__file__)` 基準なので `legacy/data/sessions.json` を見る。ディレクトリごと移動しているため動く。
 
-- [ ] **Step 6: CLAUDE.md のパス参照を更新する**
+- [x] **Step 6: CLAUDE.md のパス参照を更新する**
 
 `CLAUDE.md` 内の `app.py` / `templates/` / `data/sessions.json` / `start_warikan.bat` への参照を `legacy/` 付きに書き換える。冒頭の「概要」に次の1段落を追加する。
 
@@ -234,7 +234,7 @@ Expected: `Running on http://127.0.0.1:5000` が表示される。ブラウザ�
 > 設計書: docs/superpowers/specs/2026-08-05-warikan-cloudflare-design.md
 ```
 
-- [ ] **Step 7: コミット**
+- [x] **Step 7: コミット**
 
 ```bash
 git add -A
@@ -246,7 +246,7 @@ git commit -m "chore: Playwright MCP とサブエージェントを追加し Fla
 ## Task 2: モノレポ土台と Vitest
 
 **Files:**
-- Create: `package.json`, `tsconfig.base.json`, `.npmrc`
+- Create: `package.json`, `tsconfig.base.json`
 - Create: `packages/shared/package.json`, `packages/shared/tsconfig.json`, `packages/shared/vitest.config.ts`
 - Create: `packages/shared/src/index.ts`, `packages/shared/src/smoke.test.ts`
 
@@ -254,7 +254,7 @@ git commit -m "chore: Playwright MCP とサブエージェントを追加し Fla
 - Consumes: なし
 - Produces: `npm test` が実行できる。`@warikan/shared` が `./src/index.ts` を公開する
 
-- [ ] **Step 1: ルート package.json を作成する**
+- [x] **Step 1: ルート package.json を作成する**
 
 ```json
 {
@@ -269,7 +269,7 @@ git commit -m "chore: Playwright MCP とサブエージェントを追加し Fla
 }
 ```
 
-- [ ] **Step 2: 共通 TypeScript 設定を作成する**
+- [x] **Step 2: 共通 TypeScript 設定を作成する**
 
 `tsconfig.base.json`:
 
@@ -294,7 +294,7 @@ git commit -m "chore: Playwright MCP とサブエージェントを追加し Fla
 
 `noUncheckedIndexedAccess` を有効にするため、配列アクセスは存在確認か `!` が必要になる。Task 4 のコードはこれを前提に書いてある。
 
-- [ ] **Step 3: shared パッケージを作成する**
+- [x] **Step 3: shared パッケージを作成する**
 
 `packages/shared/package.json`:
 
@@ -342,7 +342,7 @@ export default defineConfig({
 });
 ```
 
-- [ ] **Step 4: 依存をインストールする**
+- [x] **Step 4: 依存をインストールする**
 
 ```bash
 npm install -D typescript vitest@^4.1.0 @vitest/coverage-v8
@@ -351,7 +351,7 @@ npm install -D fast-check -w @warikan/shared
 
 `vitest` は 4.1 以上が必要（`@cloudflare/vitest-pool-workers` の要件。Task 7 で使う）。
 
-- [ ] **Step 5: テストハーネスが動くことを確かめる失敗テストを書く**
+- [x] **Step 5: テストハーネスが動くことを確かめる失敗テストを書く**
 
 `packages/shared/src/smoke.test.ts`:
 
@@ -367,12 +367,12 @@ describe("shared package", () => {
 });
 ```
 
-- [ ] **Step 6: テストを実行して失敗することを確認する**
+- [x] **Step 6: テストを実行して失敗することを確認する**
 
 Run: `npm test -w @warikan/shared`
 Expected: FAIL — `Failed to resolve import "./index.js"` もしくは `PACKAGE_NAME is not exported`
 
-- [ ] **Step 7: 最小の実装を書く**
+- [x] **Step 7: 最小の実装を書く**
 
 `packages/shared/src/index.ts`:
 
@@ -380,12 +380,12 @@ Expected: FAIL — `Failed to resolve import "./index.js"` もしくは `PACKAGE
 export const PACKAGE_NAME = "@warikan/shared";
 ```
 
-- [ ] **Step 8: テストを実行して成功することを確認する**
+- [x] **Step 8: テストを実行して成功することを確認する**
 
 Run: `npm test -w @warikan/shared`
 Expected: PASS（1 test）
 
-- [ ] **Step 9: コミット**
+- [x] **Step 9: コミット**
 
 ```bash
 git add package.json package-lock.json tsconfig.base.json packages/
@@ -1178,6 +1178,8 @@ npm install @warikan/shared -w @warikan/api
 ```
 
 `@warikan/shared` はワークスペース内解決されるので、バージョン指定は不要。
+
+**TypeScript のバージョンについて**: Task 2 で `typescript@7.x`（Go 実装のネイティブ版）が入っている。`strict` と `noUncheckedIndexedAccess` が期待どおり効くことは実測済みだが、`@cloudflare/workers-types` との組み合わせは未検証。Step 9 の `wrangler types` や Step 11 の型チェックで解決できない型エラーが出た場合は、`npm install -D typescript@^5.9` でルートの TypeScript を 5系に落としてから再試行すること。その場合は本プランにその旨を追記する。
 
 - [ ] **Step 4: .gitignore に Worker 由来の生成物を追加する**
 
