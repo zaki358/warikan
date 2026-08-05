@@ -805,7 +805,7 @@ git commit -m "feat: 貪欲法で送金を最小化する calculateSettlement �
 - Consumes: `calculateSettlement`, `Participant`（Task 4）
 - Produces: なし
 
-- [ ] **Step 1: 性質テストを書く**
+- [x] **Step 1: 性質テストを書く**
 
 `packages/shared/src/settlement.properties.test.ts`:
 
@@ -918,19 +918,19 @@ describe("calculateSettlement の性質", () => {
 });
 ```
 
-- [ ] **Step 2: テストを実行する**
+- [x] **Step 2: テストを実行する**
 
 Run: `npm test -w @warikan/shared`
 Expected: PASS（23 tests）
 
 失敗した場合、fast-check が最小の反例を出力する。その入力を `settlement.test.ts` に固定の回帰テストとして追加してから `settlement.ts` を修正すること。
 
-- [ ] **Step 3: カバレッジを確認する**
+- [x] **Step 3: カバレッジを確認する**
 
 Run: `npm test -w @warikan/shared -- --coverage`
 Expected: `settlement.ts` の lines / branches とも 80% 以上
 
-- [ ] **Step 4: コミット**
+- [x] **Step 4: コミット**
 
 ```bash
 git add packages/shared
