@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}割り勘アプリ{% endblock %}
+
+{% block extra_style %}
+<style>
+  .hero { text-align: center; padding: 32px 0 8px; }
+  .hero h1 { font-size: 1.8rem; margin-bottom: 6px; }
+  .hero p { color: #888; font-size: 0.9rem; margin-bottom: 0; }
+  .history-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 0;
+    border-bottom: 1px solid #f0f0f0;
+    text-decoration: none;
+    color: inherit;
+  }
+  .history-item:last-child { border-bottom: none; }
+  .history-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 10px;
+    background: #eef3fd;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    flex-shrink: 0;
+  }
+  .history-info { flex: 1; min-width: 0; }
+  .history-title { font-weight: 600; font-size: 0.95rem; color: #222; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .history-meta { font-size: 0.8rem; color: #888; margin-top: 2px; }
+  .history-amount { font-weight: 700; color: #5b8dee; font-size: 0.95rem; white-space: nowrap; }
+  .delete-btn {
+    background: none;
+    border: none;
+    color: #ccc;
+    font-size: 1.1rem;
+    cursor: pointer;
+    padding: 4px;
+    flex-shrink: 0;
+  }
+  .delete-btn:hover { color: #dc2626; }
+  .empty { text-align: center; color: #bbb; font-size: 0.9rem; padding: 20px 0; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="hero">
+  <h1>💰 割り勘</h1>
+  <p>かんたん精算アプリ</p>
+</div>
+
+<div class="card" style="margin-top:16px;">
+  <a href="/new" class="btn btn-primary">＋ 新しい割り勘を始める</a>
+</div>
+
+<div class="card">
+  <h2>📋 保存済み履歴</h2>
+  {% if sessions %}
+    {% for s in sessions %}
+    <div style="display:flex; align-items:center; gap:8px;">
+      <a href="/history/{{ s.id }}" class="history-item" style="flex:1;">
+        <div class="history-icon">
+          {% if s.mode == "items" %}🧾{% else %}🪙{% endif %}
+        </div>
+        <div class="history-info">
+          <div class="history-title">{{ s.title }}</div>
+          <div class="history-meta">{{ s.created_at }} &nbsp;·&nbsp; {{ s.members|length }}人</div>
+        </div>
+        <div class="history-amount">¥{{ "{:,}".format(s.total) }}</div>
+      </a>
+      <form action="/history/{{ s.id }}/delete" method="post" onsubmit="return confirm('削除しますか？')">
+        <button class="delete-btn" type="submit" title="削除">🗑</button>
+      </form>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="empty">保存された履歴はありません</div>
+  {% endif %}
+</div>
+{% endblock %}

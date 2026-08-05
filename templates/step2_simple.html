@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}金額入力 | 割り勘{% endblock %}
+
+{% block extra_style %}
+<style>
+  .member-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .member-num {
+    font-size: 0.75rem;
+    color: #aaa;
+    margin-bottom: 12px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card" style="margin-top:8px;">
+  <div class="step-badge">Step 2 / 3 — シンプルモード</div>
+  <h1>名前と支払い金額</h1>
+  <p class="sub">実際に払った金額を入力してください（払っていない場合は 0）</p>
+
+  <form method="post">
+    {% for i in range(count) %}
+    <div class="member-num">メンバー {{ i + 1 }}</div>
+    <div class="member-row">
+      <div>
+        <label>名前</label>
+        <input type="text" name="name_{{ i }}"
+          value="{{ members[i].name if members and i < members|length else '' }}"
+          placeholder="例：田中" required>
+      </div>
+      <div>
+        <label>支払い額（円）</label>
+        <input type="number" name="paid_{{ i }}" min="0"
+          value="{{ members[i].paid if members and i < members|length else 0 }}" required>
+      </div>
+    </div>
+    {% if not loop.last %}<hr class="divider">{% endif %}
+    {% endfor %}
+
+    <div class="actions">
+      <a href="/step1" class="btn btn-secondary">← 戻る</a>
+      <button type="submit" class="btn btn-primary">計算する →</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
