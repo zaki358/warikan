@@ -412,7 +412,7 @@ git commit -m "chore: npm workspaces と Vitest の土台を用意"
   - `function computeShares(participants: readonly Participant[]): { total: number; perPerson: number; shares: Share[] }`
   - `function compareStr(a: string, b: string): number`
 
-- [ ] **Step 1: 型を定義する**
+- [x] **Step 1: 型を定義する**
 
 `packages/shared/src/types.ts`:
 
@@ -448,7 +448,7 @@ export type SettlementResult = SharesResult & {
 };
 ```
 
-- [ ] **Step 2: 失敗するテストを書く**
+- [x] **Step 2: 失敗するテストを書く**
 
 `packages/shared/src/settlement.test.ts`:
 
@@ -526,12 +526,12 @@ describe("computeShares", () => {
 });
 ```
 
-- [ ] **Step 3: テストを実行して失敗することを確認する**
+- [x] **Step 3: テストを実行して失敗することを確認する**
 
 Run: `npm test -w @warikan/shared`
 Expected: FAIL — `Failed to resolve import "./settlement.js"`
 
-- [ ] **Step 4: computeShares を実装する**
+- [x] **Step 4: computeShares を実装する**
 
 `packages/shared/src/settlement.ts`:
 
@@ -574,12 +574,12 @@ export function computeShares(participants: readonly Participant[]): SharesResul
 }
 ```
 
-- [ ] **Step 5: テストを実行して成功することを確認する**
+- [x] **Step 5: テストを実行して成功することを確認する**
 
 Run: `npm test -w @warikan/shared`
 Expected: PASS（smoke 1件 + computeShares 7件）
 
-- [ ] **Step 6: 公開エントリから再エクスポートする**
+- [x] **Step 6: 公開エントリから再エクスポートする**
 
 `packages/shared/src/index.ts` を次の内容に置き換える:
 
@@ -590,12 +590,12 @@ export * from "./types.js";
 export { compareStr, computeShares } from "./settlement.js";
 ```
 
-- [ ] **Step 7: 型チェックを通す**
+- [x] **Step 7: 型チェックを通す**
 
 Run: `npm run typecheck -w @warikan/shared`
 Expected: エラーなし
 
-- [ ] **Step 8: コミット**
+- [x] **Step 8: コミット**
 
 ```bash
 git add packages/shared
