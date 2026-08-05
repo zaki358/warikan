@@ -615,7 +615,7 @@ git commit -m "feat: 端数を決定的に配分する computeShares を追加"
 - Consumes: `computeShares`, `compareStr`, `Participant`, `SettlementResult`（Task 3）
 - Produces: `function calculateSettlement(participants: readonly Participant[]): SettlementResult`
 
-- [ ] **Step 1: 失敗するテストを追記する**
+- [x] **Step 1: 失敗するテストを追記する**
 
 `packages/shared/src/settlement.test.ts` の末尾に追記する。ファイル先頭の import を次に変更する。
 
@@ -701,12 +701,12 @@ describe("calculateSettlement", () => {
 });
 ```
 
-- [ ] **Step 2: テストを実行して失敗することを確認する**
+- [x] **Step 2: テストを実行して失敗することを確認する**
 
 Run: `npm test -w @warikan/shared`
 Expected: FAIL — `calculateSettlement is not exported`
 
-- [ ] **Step 3: calculateSettlement を実装する**
+- [x] **Step 3: calculateSettlement を実装する**
 
 `packages/shared/src/settlement.ts` の末尾に追記する。import 行を次に変更する。
 
@@ -770,12 +770,12 @@ export function calculateSettlement(participants: readonly Participant[]): Settl
 
 ここで書き換えているのは関数内で新しく作った配列と数値だけで、引数 `participants` には一切触れていない。呼び出し元から見える副作用は無い。
 
-- [ ] **Step 4: テストを実行して成功することを確認する**
+- [x] **Step 4: テストを実行して成功することを確認する**
 
 Run: `npm test -w @warikan/shared`
 Expected: PASS（16 tests）
 
-- [ ] **Step 5: 公開エントリを更新する**
+- [x] **Step 5: 公開エントリを更新する**
 
 `packages/shared/src/index.ts`:
 
@@ -786,7 +786,7 @@ export * from "./types.js";
 export { calculateSettlement, compareStr, computeShares } from "./settlement.js";
 ```
 
-- [ ] **Step 6: 型チェックとコミット**
+- [x] **Step 6: 型チェックとコミット**
 
 ```bash
 npm run typecheck -w @warikan/shared
