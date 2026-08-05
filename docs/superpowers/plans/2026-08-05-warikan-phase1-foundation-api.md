@@ -1451,11 +1451,19 @@ npm run --workspace @warikan/api exec -- wrangler types
 
 ```ts
 // `import { env } from "cloudflare:workers"` の env は Cloudflare.Env 型なので、
-// テスト専用のバインディングはこの namespace に対して宣言マージする。
+// テストから参照するバインディングはこの namespace に対して宣言マージする。
 // トップレベル import を書くとモジュール扱いになり global に届かないため、
 // 型は inline import で参照する。
+//
+// ACCESS_AUD / ACCESS_ALLOWED_EMAILS は本番では secret、テストでは
+// vitest.config.ts の miniflare.bindings で注入するため、
+// wrangler types が生成する型には含まれない。
+// TEST_MIGRATIONS はテスト専用。
 declare namespace Cloudflare {
   interface Env {
+    ACCESS_AUD: string;
+    ACCESS_ALLOWED_EMAILS: string;
+    DEV_BYPASS_EMAIL?: string;
     TEST_MIGRATIONS: import("@cloudflare/vitest-pool-workers").D1Migration[];
   }
 }
@@ -1554,7 +1562,7 @@ git commit -m "feat: Hono アプリの骨格と D1 スキーマ、統合テス�
   - `type UserRow = { id: string; email: string; display_name: string; created_at: string }`
   - テストヘルパ `authedRequest(path, init?)` — `DEV_BYPASS_EMAIL` 経由で認証済みリクエストを作る
 
-- [ ] **Step 1: 行の型と users のクエリを書く**
+- [x] **Step 1: 行の型と users のクエリを書く**
 
 `apps/api/src/db/rows.ts`:
 
@@ -1678,7 +1686,7 @@ export async function updateDisplayName(
 }
 ```
 
-- [ ] **Step 2: 認証ミドルウェアを書く**
+- [x] **Step 2: 認証ミドルウェアを書く**
 
 `apps/api/src/middleware/auth.ts`:
 
@@ -1760,7 +1768,7 @@ export function accessAuth(options: { keyResolver?: JWTVerifyGetKey } = {}): Mid
 
 `DEV_BYPASS_EMAIL` が設定されていても、そのメールが `ACCESS_ALLOWED_EMAILS` に含まれていなければ 403 になる。バイパスは「JWT の検証を省く」だけで、許可リストは常に効く。
 
-- [ ] **Step 3: ミドルウェアをアプリに組み込む**
+- [x] **Step 3: ミドルウェアをアプリに組み込む**
 
 `apps/api/src/index.ts` を次に置き換える:
 
@@ -1787,17 +1795,39 @@ export default app;
 
 `/api/health` を `app.use` より前に登録することで、疎通確認だけは認証なしで通る。
 
-- [ ] **Step 4: テストヘルパを書く**
+- [x] **Step 4: テストヘルパを書く**
 
 `apps/api/test/helpers.ts`:
 
 ```ts
-import { env, exports } from "cloudflare:workers";
+import { env } from "cloudflare:workers";
+
+import app from "../src/index.js";
 
 export const ALLOWED_EMAIL = "me@example.com";
 export const PARTNER_EMAIL = "partner@example.com";
 
 const BASE = "https://warikan.test";
+
+/**
+ * リクエストごとに env を差し替えて Worker を呼ぶ。
+ *
+ * `exports.default.fetch` は Fetcher 相当で第2引数が RequestInit のため、
+ * env を差し替えられない（渡しても実行時に捨てられる）。
+ * Worker の default export は Hono アプリそのもので、Hono の
+ * `app.fetch(request, env, ctx)` は第2引数が env なのでこちらを使う。
+ * 呼び出しごとに独立した env を渡せるため、テスト間の実行順序に依存しない。
+ */
+// Hono の fetch は Response | Promise<Response> を返すため async で受けて揃える。
+const fetchWithEnv = async (
+  path: string,
+  init: RequestInit,
+  bypassEmail: string | undefined,
+): Promise<Response> =>
+  app.fetch(new Request(`${BASE}${path}`, init), {
+    ...env,
+    DEV_BYPASS_EMAIL: bypassEmail,
+  });
 
 /** DEV_BYPASS_EMAIL 経由で認証済みのリクエストを送る。 */
 export async function authedFetch(
@@ -1805,18 +1835,12 @@ export async function authedFetch(
   init: RequestInit = {},
   asEmail: string = ALLOWED_EMAIL,
 ): Promise<Response> {
-  return exports.default.fetch(new Request(`${BASE}${path}`, init), {
-    ...env,
-    DEV_BYPASS_EMAIL: asEmail,
-  });
+  return fetchWithEnv(path, init, asEmail);
 }
 
 /** 認証を通さないリクエストを送る。 */
 export async function anonFetch(path: string, init: RequestInit = {}): Promise<Response> {
-  return exports.default.fetch(new Request(`${BASE}${path}`, init), {
-    ...env,
-    DEV_BYPASS_EMAIL: undefined,
-  });
+  return fetchWithEnv(path, init, undefined);
 }
 
 export async function jsonBody<T>(res: Response): Promise<T> {
@@ -1844,9 +1868,38 @@ export async function resetDb(): Promise<void> {
 }
 ```
 
-`exports.default.fetch` の第2引数で env を差し替えられない場合は、`vitest.config.ts` の `miniflare.bindings` に `DEV_BYPASS_EMAIL: "me@example.com"` を追加し、`anonFetch` 用には別ファイルの `describe` で `vi.stubEnv` を使う方針に切り替える。テスト実行時に判断すること。
+**この方式に至った経緯（実測で確認済み。同じ回り道をしないこと）**
 
-- [ ] **Step 5: 認証の失敗テストを書く**
+当初は `exports.default.fetch(request, envOverride)` を使う想定だったが、これは動かない。第2引数の型は `RequestInit<CfProperties>` で、env として渡したプロパティは実行時に黙って捨てられる（ワーカー内で `env.DEV_BYPASS_EMAIL` が `undefined` になる）。型チェックでも `error TS2353` が出る。
+
+代替として検討した2案もいずれも不可:
+
+- `vitest.config.ts` の `miniflare.bindings` に `DEV_BYPASS_EMAIL` を固定値で入れる → 常時 ON になるため `anonFetch`（バイパス解除）が作れず、`asEmail` の差し替えもできない。403 を期待するテストが全滅する
+- `vi.stubEnv` → `process.env` / `import.meta.env` を差し替えるもので、Workers のバインディング env には届かない（実測でスタブ後も値が残ることを確認）
+
+`cloudflare:workers` の `env` を直接書き換える方法は動作するが、テスト間で共有される env を変更するため実行順序に依存する。`app.fetch` なら呼び出しごとに独立した env を渡せるので、そちらを採る。
+
+**Task 7 のテスト1件を修正すること**
+
+`app.use("/api/*", accessAuth())` を入れると、`apps/api/test/health.test.ts` の「未定義のパスは 404 エンベロープを返す」が 403 を返すようになる（未認証で `/api/*` を叩くため）。これは正しい挙動なので、次の2件に置き換える:
+
+```ts
+  it("認証済みでも未定義のパスは 404 エンベロープを返す", async () => {
+    const res = await authedFetch("/api/nope");
+
+    expect(res.status).toBe(404);
+  });
+
+  it("未認証で未定義のパスを叩くと 403 で、経路の存在を漏らさない", async () => {
+    const res = await exports.default.fetch(new Request("https://warikan.test/api/nope"));
+
+    expect(res.status).toBe(403);
+  });
+```
+
+`health.test.ts` の冒頭に `import { authedFetch } from "./helpers.js";` を追加する。これで health は4件から5件になる。
+
+- [x] **Step 5: 認証の失敗テストを書く**
 
 `apps/api/test/auth.test.ts`:
 
@@ -1990,12 +2043,12 @@ describe("JWT の検証", () => {
 });
 ```
 
-- [ ] **Step 6: `/api/me` が未実装のため失敗することを確認する**
+- [x] **Step 6: `/api/me` が未実装のため失敗することを確認する**
 
 Run: `npm test -w @warikan/api`
 Expected: FAIL — `/api/me` が 404 を返し、200 を期待するテストが落ちる。403 系のテストは通る
 
-- [ ] **Step 7: 仮の `/api/me` を追加する**
+- [x] **Step 7: 仮の `/api/me` を追加する**
 
 `apps/api/src/index.ts` の `app.use("/api/*", accessAuth());` の直後に追加:
 
@@ -2006,12 +2059,14 @@ app.get("/api/me", (c) => {
 });
 ```
 
-- [ ] **Step 8: テストを実行して成功することを確認する**
+- [x] **Step 8: テストを実行して成功することを確認する**
 
 Run: `npm test -w @warikan/api`
-Expected: PASS（health 4件 + auth 6件 + JWT 検証 5件）
+Expected: PASS（health 5件 + auth 6件 + JWT 検証 5件 = 16件）
 
-- [ ] **Step 9: コミット**
+`npm run typecheck -w @warikan/api` も通すこと。
+
+- [x] **Step 9: コミット**
 
 ```bash
 git add apps/api

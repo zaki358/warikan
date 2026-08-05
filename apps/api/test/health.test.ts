@@ -1,6 +1,8 @@
 import { env, exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
+import { authedFetch } from "./helpers.js";
+
 describe("疎通と DB の初期状態", () => {
   it("GET /api/health が 200 を返す", async () => {
     const res = await exports.default.fetch(new Request("https://warikan.test/api/health"));
@@ -9,10 +11,16 @@ describe("疎通と DB の初期状態", () => {
     await expect(res.json()).resolves.toEqual({ ok: true, data: { status: "ok" } });
   });
 
-  it("未定義のパスは 404 エンベロープを返す", async () => {
-    const res = await exports.default.fetch(new Request("https://warikan.test/api/nope"));
+  it("認証済みでも未定義のパスは 404 エンベロープを返す", async () => {
+    const res = await authedFetch("/api/nope");
 
     expect(res.status).toBe(404);
+  });
+
+  it("未認証で未定義のパスを叩くと 403 で、経路の存在を漏らさない", async () => {
+    const res = await exports.default.fetch(new Request("https://warikan.test/api/nope"));
+
+    expect(res.status).toBe(403);
   });
 
   it("マイグレーションでカテゴリが7件投入されている", async () => {
