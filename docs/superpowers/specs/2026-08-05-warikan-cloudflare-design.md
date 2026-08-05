@@ -1,6 +1,6 @@
 # 割り勘アプリ Cloudflare 移行 + 月次モード追加 設計書
 
-作成日: 2026-08-02
+作成日: 2026-08-05
 対象: `C:\Users\barub\Project\warikan`
 
 ---
@@ -23,7 +23,7 @@
 | 2 | バックエンド | Hono + TypeScript on Workers | Workers/D1 の第一級サポート。Python Workers は beta で Flask 資産も流用できず、利点がない |
 | 3 | フロントエンド | React + Vite（SPA） | 要望どおり。同一 Worker が静的配信 |
 | 4 | 配信構成 | 単一 Worker + Static Assets | CORS 不要、Access が守るホスト名が1つで済む |
-| 5 | DB | D1 `warikan-db` + Drizzle ORM | 既存 `kakei-db` は別アプリのものなので分離する |
+| 5 | DB | D1 `warikan-db` + 素の prepared statement + 手書き SQL マイグレーション | 既存 `kakei-db` は別アプリのものなので分離する。ORM を挟まない理由は 4.4 節 |
 | 6 | 月次の負担割合 | 50:50 固定 | 既存の均等割りロジックをそのまま使える。比率対応は将来拡張 |
 | 7 | 月の区切り | カレンダー月（1日〜末日） | 「月末や月初めに計算」という要件に素直に対応 |
 | 8 | 締めの扱い | 精算結果をスナップショット保存。支出の編集は常に可能 | 確定後に記録を直したくなることが実際にあるため |
@@ -68,7 +68,7 @@ warikan/
 │     │  ├─ index.ts        エントリ。ルータ組み立て
 │     │  ├─ middleware/     access.ts（JWT検証）, error.ts
 │     │  ├─ routes/         monthly.ts, events.ts, categories.ts, me.ts
-│     │  ├─ db/             schema.ts（Drizzle）, queries/
+│     │  ├─ db/             rows.ts（行の型）, queries/
 │     │  └─ migrations/
 │     └─ wrangler.jsonc
 ├─ packages/
@@ -230,6 +230,24 @@ CREATE TABLE event_settlements (
 
 `食費` / `日用品` / `外食` / `光熱費` / `交通費` / `娯楽` / `その他` をマイグレーションで投入する。`is_active` で非表示にでき、追加は行の挿入だけで済む。
 
+### 4.4 ORM を挟まない理由と、書き込みの原子性
+
+当初 Drizzle ORM を想定していたが、素の D1 prepared statement + 手書き SQL マイグレーションに変更した。
+
+- テーブル7つ、クエリも単純で、ORM が解く問題（複雑な結合、動的クエリ組み立て）が存在しない
+- drizzle-kit が出力するマイグレーションは `--> statement-breakpoint` というコメント行で文を区切る。テスト側で使う `readD1Migrations` はコメントを含む分割で[既知の不具合](https://github.com/cloudflare/workers-sdk/issues/7739)があり、統合テスト基盤と噛み合わないリスクがある
+- 手書きの番号付き `.sql` は wrangler と `readD1Migrations` の両方がネイティブに扱える
+
+型安全性は、行の型を `apps/api/src/db/rows.ts` に明示し、`.all<Row>()` / `.first<Row>()` の型引数で受けることと、境界での zod 検証で担保する。
+
+**書き込みの原子性**: D1 は対話的トランザクション（`BEGIN` / `COMMIT`）に対応していない。複数文をまとめて原子的に実行する必要がある箇所（支出の変更と `is_dirty=1` の更新など）は `env.DB.batch([...])` を使う。`batch` は暗黙のトランザクションとして実行される。
+
+### 4.5 ユーザー行の自動作成
+
+`users` にメールアドレスをマイグレーションで埋め込むと、個人情報がリポジトリに入る。代わりに**初回アクセス時に自動作成**する。
+
+認証ミドルウェアがメールで `users` を引き、行が無く、かつそのメールが `ACCESS_ALLOWED_EMAILS` に含まれていれば、`display_name` をメールのローカル部として行を作る。表示名は後から `PATCH /api/me` で変更できる。これによりメールアドレスがソースにもマイグレーションにも現れない。
+
 ## 5. 精算ロジック
 
 `packages/shared/src/settlement.ts`。DB にも HTTP にも依存しない純関数。
@@ -243,7 +261,8 @@ type Transfer = { fromId: string; toId: string; amount: number };
 
 type SettlementResult = {
   total: number;
-  shares: { id: string; share: number }[];   // 各人の負担額
+  perPerson: number;                          // floor(total / n)。表示用
+  shares: { id: string; share: number }[];    // 各人の負担額（端数込み）
   transfers: Transfer[];
 };
 
@@ -300,7 +319,8 @@ function calculateSettlement(participants: Participant[]): SettlementResult;
 
 | メソッド | パス | 内容 |
 |---|---|---|
-| GET | `/api/me` | `{ userId, email, displayName }` |
+| GET | `/api/me` | `{ userId, email, displayName }`。行が無ければ 4.5 に従い作成 |
+| PATCH | `/api/me` | 自分の `display_name` を変更（1〜20文字） |
 | GET | `/api/categories` | 有効なカテゴリ一覧 |
 
 ### 6.2 月次モード
@@ -334,6 +354,8 @@ function calculateSettlement(participants: Participant[]): SettlementResult;
 ```
 
 支払い済みフラグはスナップショット内に持ち、`PATCH /api/monthly/:ym/result/transfers/:index` で更新する。
+
+**再計算時の `isPaid` の扱い**: 再計算後の送金のうち、`fromId` / `toId` / `amount` の3つがすべて一致する送金が旧スナップショットに存在し、それが `isPaid: true` だった場合のみ `true` を引き継ぐ。金額が1円でも変わっていれば `false` に戻す。「すでに渡した」という事実は金額とセットでしか意味を持たないため。
 
 ### 6.3 単発モード
 
@@ -422,7 +444,7 @@ function calculateSettlement(participants: Participant[]): SettlementResult;
 | 層 | ツール | 対象 |
 |---|---|---|
 | ユニット | Vitest | `packages/shared` の精算ロジック、フォーマッタ、バリデーションスキーマ |
-| 統合 | Vitest + `@cloudflare/vitest-pool-workers` | Hono の各ルート。実 D1 に近い miniflare 環境でマイグレーションを流して検証 |
+| 統合 | Vitest 4.1+ + `@cloudflare/vitest-pool-workers` | Hono の各ルート。実 D1 に近い miniflare 環境でマイグレーションを流して検証 |
 | E2E | Playwright | 主要3フロー |
 
 E2E の3フロー:
