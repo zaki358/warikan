@@ -954,7 +954,7 @@ git commit -m "test: 精算ロジックの性質テストを fast-check で追�
 
 また Python の `sorted` は安定ソートで、残高が同額の債務者は入力順のまま並ぶ。TS は id 昇順で tie-break する。両者を一致させるため、フィクスチャのケースは**入力順と名前の昇順が一致する**ように作る。
 
-- [ ] **Step 1: フィクスチャ生成スクリプトを書く**
+- [x] **Step 1: フィクスチャ生成スクリプトを書く**
 
 `legacy/parity_dump.py`:
 
@@ -1013,18 +1013,20 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 2: フィクスチャを生成する**
+- [x] **Step 2: フィクスチャを生成する**
 
 ```bash
 mkdir -p packages/shared/src/__fixtures__
-cd legacy && python parity_dump.py > ../packages/shared/src/__fixtures__/flask-parity.json && cd ..
+cd legacy && PYTHONIOENCODING=utf-8 python parity_dump.py > ../packages/shared/src/__fixtures__/flask-parity.json && cd ..
 ```
 
 `legacy` ディレクトリで実行するのは `from app import calculate_settlements` を解決するため。
 
+`PYTHONIOENCODING=utf-8` は Windows で必須。付けないと Python の stdout が cp932 になり、`ensure_ascii=False` で出力した日本語のケース名が文字化けした JSON になる（実測で確認済み）。
+
 Expected: `packages/shared/src/__fixtures__/flask-parity.json` に7件の配列が書かれる。中身を目視して、`transfers` が空でないケースが少なくとも5件あることを確認する。
 
-- [ ] **Step 3: パリティテストを書く**
+- [x] **Step 3: パリティテストを書く**
 
 `packages/shared/src/settlement.parity.test.ts`:
 
@@ -1067,14 +1069,14 @@ describe("Flask 実装とのパリティ", () => {
 });
 ```
 
-- [ ] **Step 4: テストを実行する**
+- [x] **Step 4: テストを実行する**
 
 Run: `npm test -w @warikan/shared`
 Expected: PASS（31 tests）
 
 不一致が出た場合、まず TS 側が正しいか手計算で検証すること。Flask 側の丸め由来の差であれば、そのケースをフィクスチャから外し、`CASES` のコメントに理由を書く。TS 側のバグであれば `settlement.ts` を直す。
 
-- [ ] **Step 5: コミット**
+- [x] **Step 5: コミット**
 
 ```bash
 git add legacy/parity_dump.py packages/shared
