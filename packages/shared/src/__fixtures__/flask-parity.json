@@ -1,0 +1,228 @@
+[
+  {
+    "name": "2人・片方が全額立て替え",
+    "members": [
+      {
+        "name": "A",
+        "paid": 10000
+      },
+      {
+        "name": "B",
+        "paid": 0
+      }
+    ],
+    "total": 10000,
+    "perPerson": 5000,
+    "transfers": [
+      {
+        "fromId": "B",
+        "toId": "A",
+        "amount": 5000
+      }
+    ]
+  },
+  {
+    "name": "3人・全員同額",
+    "members": [
+      {
+        "name": "A",
+        "paid": 3000
+      },
+      {
+        "name": "B",
+        "paid": 3000
+      },
+      {
+        "name": "C",
+        "paid": 3000
+      }
+    ],
+    "total": 9000,
+    "perPerson": 3000,
+    "transfers": []
+  },
+  {
+    "name": "3人・1人が多く立て替え",
+    "members": [
+      {
+        "name": "A",
+        "paid": 6000
+      },
+      {
+        "name": "B",
+        "paid": 3000
+      },
+      {
+        "name": "C",
+        "paid": 0
+      }
+    ],
+    "total": 9000,
+    "perPerson": 3000,
+    "transfers": [
+      {
+        "fromId": "C",
+        "toId": "A",
+        "amount": 3000
+      }
+    ]
+  },
+  {
+    "name": "4人・債権者が2人",
+    "members": [
+      {
+        "name": "A",
+        "paid": 8000
+      },
+      {
+        "name": "B",
+        "paid": 0
+      },
+      {
+        "name": "C",
+        "paid": 4000
+      },
+      {
+        "name": "D",
+        "paid": 0
+      }
+    ],
+    "total": 12000,
+    "perPerson": 3000,
+    "transfers": [
+      {
+        "fromId": "B",
+        "toId": "A",
+        "amount": 3000
+      },
+      {
+        "fromId": "D",
+        "toId": "A",
+        "amount": 2000
+      },
+      {
+        "fromId": "D",
+        "toId": "C",
+        "amount": 1000
+      }
+    ]
+  },
+  {
+    "name": "5人・ばらばら",
+    "members": [
+      {
+        "name": "A",
+        "paid": 12000
+      },
+      {
+        "name": "B",
+        "paid": 5000
+      },
+      {
+        "name": "C",
+        "paid": 3000
+      },
+      {
+        "name": "D",
+        "paid": 0
+      },
+      {
+        "name": "E",
+        "paid": 0
+      }
+    ],
+    "total": 20000,
+    "perPerson": 4000,
+    "transfers": [
+      {
+        "fromId": "D",
+        "toId": "A",
+        "amount": 4000
+      },
+      {
+        "fromId": "E",
+        "toId": "A",
+        "amount": 4000
+      },
+      {
+        "fromId": "C",
+        "toId": "B",
+        "amount": 1000
+      }
+    ]
+  },
+  {
+    "name": "2人・全員0円",
+    "members": [
+      {
+        "name": "A",
+        "paid": 0
+      },
+      {
+        "name": "B",
+        "paid": 0
+      }
+    ],
+    "total": 0,
+    "perPerson": 0,
+    "transfers": []
+  },
+  {
+    "name": "6人・2人だけ立て替え",
+    "members": [
+      {
+        "name": "A",
+        "paid": 18000
+      },
+      {
+        "name": "B",
+        "paid": 0
+      },
+      {
+        "name": "C",
+        "paid": 0
+      },
+      {
+        "name": "D",
+        "paid": 6000
+      },
+      {
+        "name": "E",
+        "paid": 0
+      },
+      {
+        "name": "F",
+        "paid": 0
+      }
+    ],
+    "total": 24000,
+    "perPerson": 4000,
+    "transfers": [
+      {
+        "fromId": "B",
+        "toId": "A",
+        "amount": 4000
+      },
+      {
+        "fromId": "C",
+        "toId": "A",
+        "amount": 4000
+      },
+      {
+        "fromId": "E",
+        "toId": "A",
+        "amount": 4000
+      },
+      {
+        "fromId": "F",
+        "toId": "A",
+        "amount": 2000
+      },
+      {
+        "fromId": "F",
+        "toId": "D",
+        "amount": 2000
+      }
+    ]
+  }
+]
