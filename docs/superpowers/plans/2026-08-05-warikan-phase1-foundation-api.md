@@ -1103,7 +1103,7 @@ git commit -m "test: Flask 実装との同値性検証を追加"
   - `type AppEnv = { Bindings: Env; Variables: { user: AuthUser } }`（`user` は Task 8 で設定）
   - `app`（Hono インスタンス、default export）
 
-- [ ] **Step 1: D1 データベースを作成する**
+- [x] **Step 1: D1 データベースを作成する**
 
 ```bash
 npx wrangler d1 create warikan-db
@@ -1111,7 +1111,7 @@ npx wrangler d1 create warikan-db
 
 出力に含まれる `database_id`（UUID）を控える。次のステップで `wrangler.jsonc` に貼る。
 
-- [ ] **Step 2: api パッケージと Worker 設定を作成する**
+- [x] **Step 2: api パッケージと Worker 設定を作成する**
 
 `apps/api/package.json`:
 
@@ -1139,11 +1139,16 @@ npx wrangler d1 create warikan-db
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "types": ["@cloudflare/workers-types", "@cloudflare/vitest-pool-workers"]
+    "types": ["@cloudflare/workers-types", "@cloudflare/vitest-pool-workers/types"]
   },
   "include": ["src/**/*.ts", "test/**/*.ts", "worker-configuration.d.ts"]
 }
 ```
+
+末尾の `/types` は必須（実測で確認済み）。`declare module "cloudflare:test"` は
+`@cloudflare/vitest-pool-workers/types` サブパス（`types/cloudflare-test.d.ts`）にあり、
+パッケージ root の型（`dist/pool/index.d.mts`）には含まれない。`/types` を付けないと
+テストファイルが `error TS2307: Cannot find module 'cloudflare:test'` で落ちる。
 
 `apps/api/wrangler.jsonc`（`database_id` は Step 1 で控えた実際の UUID に置き換える）:
 
@@ -1171,7 +1176,7 @@ npx wrangler d1 create warikan-db
 
 `ACCESS_AUD` と `ACCESS_ALLOWED_EMAILS` は secret として設定するため `vars` には書かない（Plan 3 で `wrangler secret put` する）。
 
-- [ ] **Step 3: 依存をインストールする**
+- [x] **Step 3: 依存をインストールする**
 
 ```bash
 npm install hono jose zod -w @warikan/api
@@ -1183,7 +1188,7 @@ npm install @warikan/shared -w @warikan/api
 
 **TypeScript のバージョンについて**: Task 2 で `typescript@7.x`（Go 実装のネイティブ版）が入っている。`strict` と `noUncheckedIndexedAccess` が期待どおり効くことは実測済みだが、`@cloudflare/workers-types` との組み合わせは未検証。Step 9 の `wrangler types` や Step 11 の型チェックで解決できない型エラーが出た場合は、`npm install -D typescript@^5.9` でルートの TypeScript を 5系に落としてから再試行すること。その場合は本プランにその旨を追記する。
 
-- [ ] **Step 4: .gitignore に Worker 由来の生成物を追加する**
+- [x] **Step 4: .gitignore に Worker 由来の生成物を追加する**
 
 `.gitignore` の `# Cloudflare / Wrangler` セクションに追記:
 
@@ -1193,7 +1198,7 @@ apps/api/worker-configuration.d.ts
 
 型定義は `wrangler types` で再生成できるためコミットしない。
 
-- [ ] **Step 5: マイグレーションを書く**
+- [x] **Step 5: マイグレーションを書く**
 
 `apps/api/migrations/0001_init.sql`:
 
@@ -1296,7 +1301,7 @@ INSERT INTO categories (name, sort_order, is_active) VALUES
 
 最終行がコメントで終わらないよう注意する（`readD1Migrations` の分割に既知の不具合があるため）。
 
-- [ ] **Step 6: Env とレスポンスヘルパを書く**
+- [x] **Step 6: Env とレスポンスヘルパを書く**
 
 `apps/api/src/env.ts`:
 
@@ -1347,7 +1352,7 @@ export const newId = (): string => crypto.randomUUID();
 export const nowIso = (): string => new Date().toISOString();
 ```
 
-- [ ] **Step 7: エラーミドルウェアとアプリ本体を書く**
+- [x] **Step 7: エラーミドルウェアとアプリ本体を書く**
 
 `apps/api/src/middleware/errors.ts`:
 
@@ -1391,7 +1396,7 @@ export default app;
 
 `/api/health` は認証を通さない。疎通確認専用で、いかなるデータも返さない。
 
-- [ ] **Step 8: 統合テスト基盤を設定する**
+- [x] **Step 8: 統合テスト基盤を設定する**
 
 `apps/api/vitest.config.ts`:
 
@@ -1436,25 +1441,29 @@ import { env } from "cloudflare:workers";
 await applyD1Migrations(env.DB, env.TEST_MIGRATIONS);
 ```
 
-- [ ] **Step 9: Worker の型を生成する**
+- [x] **Step 9: Worker の型を生成する**
 
 ```bash
 npm run --workspace @warikan/api exec -- wrangler types
 ```
 
-生成された `apps/api/worker-configuration.d.ts` に `TEST_MIGRATIONS` が含まれない場合は、`apps/api/test/env.d.ts` を作って補う:
+生成された `apps/api/worker-configuration.d.ts` に `TEST_MIGRATIONS` は含まれない（`wrangler types` は `wrangler.jsonc` のバインディングしか見ず、`TEST_MIGRATIONS` は vitest 側で注入するため）。`apps/api/test/env.d.ts` を作って補う:
 
 ```ts
-import type { D1Migration } from "@cloudflare/vitest-pool-workers";
-
-declare module "cloudflare:workers" {
+// `import { env } from "cloudflare:workers"` の env は Cloudflare.Env 型なので、
+// テスト専用のバインディングはこの namespace に対して宣言マージする。
+// トップレベル import を書くとモジュール扱いになり global に届かないため、
+// 型は inline import で参照する。
+declare namespace Cloudflare {
   interface Env {
-    TEST_MIGRATIONS: D1Migration[];
+    TEST_MIGRATIONS: import("@cloudflare/vitest-pool-workers").D1Migration[];
   }
 }
 ```
 
-- [ ] **Step 10: 疎通テストを書いて失敗させる**
+`declare module "cloudflare:workers" { interface Env {...} }` では**効かない**（実測で確認済み）。`wrangler types` が生成するのは `declare namespace Cloudflare { interface Env extends __BaseEnv_Env {} }` と global の `interface Env` の2つで、`cloudflare:workers` の `env` は前者を指している。モジュール拡張は別物として扱われ、`error TS2339: Property 'TEST_MIGRATIONS' does not exist on type 'Env'` が残る。
+
+- [x] **Step 10: 疎通テストを書いて失敗させる**
 
 `apps/api/test/health.test.ts`:
 
@@ -1504,14 +1513,14 @@ describe("疎通と DB の初期状態", () => {
 });
 ```
 
-- [ ] **Step 11: テストを実行する**
+- [x] **Step 11: テストを実行する**
 
 Run: `npm test -w @warikan/api`
 Expected: PASS（4 tests）
 
 `exports` が `cloudflare:workers` から解決できないエラーが出た場合は、インストールされた `@cloudflare/vitest-pool-workers` が古い。`import { SELF } from "cloudflare:test"` に切り替え、`exports.default.fetch(...)` を `SELF.fetch(...)` に置き換える。以降のタスクのテストも同様に読み替えること。
 
-- [ ] **Step 12: ローカル D1 にマイグレーションを適用して確認する**
+- [x] **Step 12: ローカル D1 にマイグレーションを適用して確認する**
 
 ```bash
 npm run migrate:local -w @warikan/api
@@ -1519,7 +1528,7 @@ npm run migrate:local -w @warikan/api
 
 Expected: 2件のマイグレーションが適用された旨が表示される
 
-- [ ] **Step 13: コミット**
+- [x] **Step 13: コミット**
 
 ```bash
 git add apps .gitignore package-lock.json
