@@ -1,0 +1,26 @@
+{
+  "name": "@warikan/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "migrate:local": "wrangler d1 migrations apply warikan-db --local",
+    "migrate:remote": "wrangler d1 migrations apply warikan-db --remote"
+  },
+  "dependencies": {
+    "@warikan/shared": "^0.0.0",
+    "hono": "^4.13.0",
+    "jose": "^6.2.8",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.20.2",
+    "@cloudflare/workers-types": "^5.20260804.1",
+    "wrangler": "^4.119.0"
+  }
+}
