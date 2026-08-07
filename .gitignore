@@ -1,6 +1,7 @@
 # Node
 node_modules/
 dist/
+apps/web/dist/
 .vite/
 
 # Cloudflare / Wrangler
