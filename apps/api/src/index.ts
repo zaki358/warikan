@@ -4,6 +4,8 @@ import type { AppEnv } from "./env.js";
 import { ok } from "./lib/response.js";
 import { accessAuth } from "./middleware/auth.js";
 import { onError } from "./middleware/errors.js";
+import { categoryRoutes } from "./routes/categories.js";
+import { meRoutes } from "./routes/me.js";
 
 const app = new Hono<AppEnv>();
 
@@ -13,10 +15,8 @@ app.get("/api/health", (c) => c.json(ok({ status: "ok" })));
 
 app.use("/api/*", accessAuth());
 
-app.get("/api/me", (c) => {
-  const user = c.get("user");
-  return c.json(ok({ userId: user.id, email: user.email, displayName: user.displayName }));
-});
+app.route("/api/me", meRoutes);
+app.route("/api/categories", categoryRoutes);
 
 app.notFound((c) => c.json({ ok: false, error: { code: "NOT_FOUND", message: "見つかりません" } }, 404));
 
