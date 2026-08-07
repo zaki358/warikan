@@ -31,9 +31,14 @@ describe("GET /api/monthly/:ym", () => {
     expect(body.data?.expenses).toEqual([]);
   });
 
-  it("2回呼んでも期間の行は1つだけ", async () => {
-    await authedFetch("/api/monthly/2026-08");
-    await authedFetch("/api/monthly/2026-08");
+  it("2回呼んでも期間の行は1つだけで、2回目も成功する", async () => {
+    const first = await authedFetch("/api/monthly/2026-08");
+    const second = await authedFetch("/api/monthly/2026-08");
+
+    // 行数だけを見ると、2回目が UNIQUE 制約違反で 500 になっていても気づけない。
+    // 暗黙作成は何度呼んでも安全であることが要件なので、応答も検証する。
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
 
     const row = await env.DB.prepare(
       "SELECT COUNT(*) AS count FROM monthly_periods WHERE year = 2026 AND month = 8",

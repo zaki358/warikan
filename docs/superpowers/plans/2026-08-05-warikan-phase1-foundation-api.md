@@ -2328,7 +2328,7 @@ git commit -m "feat: /api/me と /api/categories を追加"
   - `listExpenses(db, periodId): Promise<MonthlyExpenseRow[]>`
   - `monthlyRoutes: Hono<AppEnv>`
 
-- [ ] **Step 1: 失敗するテストを書く**
+- [x] **Step 1: 失敗するテストを書く**
 
 `apps/api/test/monthly-period.test.ts`:
 
@@ -2366,9 +2366,14 @@ describe("GET /api/monthly/:ym", () => {
     expect(body.data?.expenses).toEqual([]);
   });
 
-  it("2回呼んでも期間の行は1つだけ", async () => {
-    await authedFetch("/api/monthly/2026-08");
-    await authedFetch("/api/monthly/2026-08");
+  it("2回呼んでも期間の行は1つだけで、2回目も成功する", async () => {
+    const first = await authedFetch("/api/monthly/2026-08");
+    const second = await authedFetch("/api/monthly/2026-08");
+
+    // 行数だけを見ると、2回目が UNIQUE 制約違反で 500 になっていても気づけない。
+    // 暗黙作成は何度呼んでも安全であることが要件なので、応答も検証する。
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
 
     const row = await env.DB.prepare(
       "SELECT COUNT(*) AS count FROM monthly_periods WHERE year = 2026 AND month = 8",
@@ -2414,12 +2419,12 @@ describe("GET /api/monthly", () => {
 });
 ```
 
-- [ ] **Step 2: テストを実行して失敗することを確認する**
+- [x] **Step 2: テストを実行して失敗することを確認する**
 
 Run: `npm test -w @warikan/api`
 Expected: FAIL — `/api/monthly/*` が 404
 
-- [ ] **Step 3: 年月のパースを書く**
+- [x] **Step 3: 年月のパースを書く**
 
 `apps/api/src/lib/ym.ts`:
 
@@ -2446,7 +2451,7 @@ export const daysInMonth = (year: number, month: number): number =>
   new Date(Date.UTC(year, month, 0)).getUTCDate();
 ```
 
-- [ ] **Step 4: monthly のクエリを書く**
+- [x] **Step 4: monthly のクエリを書く**
 
 `apps/api/src/db/monthly.ts`:
 
@@ -2505,7 +2510,7 @@ export async function sumByPeriod(db: D1Database, periodId: string): Promise<num
 }
 ```
 
-- [ ] **Step 5: ルートを書く**
+- [x] **Step 5: ルートを書く**
 
 `apps/api/src/routes/monthly.ts`:
 
@@ -2556,7 +2561,7 @@ monthlyRoutes.get("/:ym", async (c) => {
 });
 ```
 
-- [ ] **Step 6: ルートを登録する**
+- [x] **Step 6: ルートを登録する**
 
 `apps/api/src/index.ts` に追加:
 
@@ -2567,12 +2572,12 @@ import { monthlyRoutes } from "./routes/monthly.js";
 app.route("/api/monthly", monthlyRoutes);
 ```
 
-- [ ] **Step 7: テストを実行して成功することを確認する**
+- [x] **Step 7: テストを実行して成功することを確認する**
 
 Run: `npm test -w @warikan/api`
-Expected: PASS（24 tests）
+Expected: PASS（既存 23 + monthly-period 6 = 29 tests）
 
-- [ ] **Step 8: コミット**
+- [x] **Step 8: コミット**
 
 ```bash
 git add apps/api
