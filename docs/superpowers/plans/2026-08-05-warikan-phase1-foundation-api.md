@@ -2602,7 +2602,7 @@ git commit -m "feat: 月次の期間取得と暗黙作成を追加"
   - `markDirtyStatement(db, periodId): D1PreparedStatement`
   - `findUserById(db, id): Promise<UserRow | null>`
 
-- [ ] **Step 1: 失敗するテストを書く**
+- [x] **Step 1: 失敗するテストを書く**
 
 `apps/api/test/monthly-expense.test.ts`:
 
@@ -2620,7 +2620,7 @@ type Expense = {
   categoryId: number | null;
   spentOn: string;
 };
-type Envelope<T> = { ok: boolean; data?: T; error?: { code: string } };
+type Envelope<T> = { ok: boolean; data?: T; error?: { code: string; message: string } };
 
 async function meId(): Promise<string> {
   const body = await jsonBody<Envelope<{ userId: string }>>(await authedFetch("/api/me"));
@@ -2763,6 +2763,9 @@ describe("PATCH / DELETE /api/monthly/expenses/:id", () => {
     expect(body.data?.expenses).toEqual([]);
   });
 
+  // 未登録パスに対する Hono の notFound も 404 を返すため、ステータスだけでは
+  // 「ルートが存在して支出が見つからなかった」のか「ルートごと無い」のかを区別できない。
+  // ハンドラ側のメッセージまで検証して、ルートの存在を担保する。
   it("存在しない支出の更新は 404", async () => {
     const res = await authedFetch(
       "/api/monthly/expenses/00000000-0000-0000-0000-000000000000",
@@ -2770,6 +2773,8 @@ describe("PATCH / DELETE /api/monthly/expenses/:id", () => {
     );
 
     expect(res.status).toBe(404);
+    const body = await jsonBody<Envelope<never>>(res);
+    expect(body.error?.message).toBe("支出が見つかりません");
   });
 
   it("存在しない支出の削除は 404", async () => {
@@ -2778,6 +2783,8 @@ describe("PATCH / DELETE /api/monthly/expenses/:id", () => {
     });
 
     expect(res.status).toBe(404);
+    const body = await jsonBody<Envelope<never>>(res);
+    expect(body.error?.message).toBe("支出が見つかりません");
   });
 });
 
@@ -2844,12 +2851,12 @@ describe("確定済み期間への変更は is_dirty を立てる", () => {
 });
 ```
 
-- [ ] **Step 2: テストを実行して失敗することを確認する**
+- [x] **Step 2: テストを実行して失敗することを確認する**
 
 Run: `npm test -w @warikan/api`
 Expected: FAIL — 支出系のエンドポイントが 404
 
-- [ ] **Step 3: 支出のクエリを追加する**
+- [x] **Step 3: 支出のクエリを追加する**
 
 `apps/api/src/db/monthly.ts` の末尾に追記:
 
@@ -2940,7 +2947,7 @@ export async function deleteExpense(db: D1Database, id: string, periodId: string
 }
 ```
 
-- [ ] **Step 4: 支出のルートを追加する**
+- [x] **Step 4: 支出のルートを追加する**
 
 `apps/api/src/routes/monthly.ts` の import に追加:
 
@@ -3088,12 +3095,12 @@ monthlyRoutes.delete("/expenses/:id", async (c) => {
 
 ルートの登録順に注意する。Hono は先に登録したものが優先されるため、`/:ym/expenses` より `/expenses/:id` を後に置いても、パターンが異なるので衝突しない。ただし `GET /:ym` は `expenses` という文字列にもマッチしうるので、`parseYm` が `null` を返して 400 になる。これは意図した挙動。
 
-- [ ] **Step 5: テストを実行して成功することを確認する**
+- [x] **Step 5: テストを実行して成功することを確認する**
 
 Run: `npm test -w @warikan/api`
-Expected: PASS（40 tests）
+Expected: PASS（既存 29 + monthly-expense 16 = 45 tests）
 
-- [ ] **Step 6: コミット**
+- [x] **Step 6: コミット**
 
 ```bash
 git add apps/api

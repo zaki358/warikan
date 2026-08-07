@@ -11,7 +11,7 @@ type Expense = {
   categoryId: number | null;
   spentOn: string;
 };
-type Envelope<T> = { ok: boolean; data?: T; error?: { code: string } };
+type Envelope<T> = { ok: boolean; data?: T; error?: { code: string; message: string } };
 
 async function meId(): Promise<string> {
   const body = await jsonBody<Envelope<{ userId: string }>>(await authedFetch("/api/me"));
@@ -154,6 +154,9 @@ describe("PATCH / DELETE /api/monthly/expenses/:id", () => {
     expect(body.data?.expenses).toEqual([]);
   });
 
+  // 未登録パスに対する Hono の notFound も 404 を返すため、ステータスだけでは
+  // 「ルートが存在して支出が見つからなかった」のか「ルートごと無い」のかを区別できない。
+  // ハンドラ側のメッセージまで検証して、ルートの存在を担保する。
   it("存在しない支出の更新は 404", async () => {
     const res = await authedFetch(
       "/api/monthly/expenses/00000000-0000-0000-0000-000000000000",
@@ -161,6 +164,8 @@ describe("PATCH / DELETE /api/monthly/expenses/:id", () => {
     );
 
     expect(res.status).toBe(404);
+    const body = await jsonBody<Envelope<never>>(res);
+    expect(body.error?.message).toBe("支出が見つかりません");
   });
 
   it("存在しない支出の削除は 404", async () => {
@@ -169,6 +174,8 @@ describe("PATCH / DELETE /api/monthly/expenses/:id", () => {
     });
 
     expect(res.status).toBe(404);
+    const body = await jsonBody<Envelope<never>>(res);
+    expect(body.error?.message).toBe("支出が見つかりません");
   });
 });
 
