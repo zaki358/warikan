@@ -5,6 +5,10 @@ export async function findUserByEmail(db: D1Database, email: string): Promise<Us
   return db.prepare("SELECT * FROM users WHERE email = ?").bind(email).first<UserRow>();
 }
 
+export async function findUserById(db: D1Database, id: string): Promise<UserRow | null> {
+  return db.prepare("SELECT * FROM users WHERE id = ?").bind(id).first<UserRow>();
+}
+
 export async function listUsers(db: D1Database): Promise<UserRow[]> {
   const { results } = await db
     .prepare("SELECT * FROM users ORDER BY created_at, id")
