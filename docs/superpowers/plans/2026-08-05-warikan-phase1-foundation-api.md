@@ -1419,6 +1419,11 @@ export default defineConfig({
             ACCESS_TEAM_DOMAIN: "test.cloudflareaccess.com",
             ACCESS_AUD: "test-audience",
             ACCESS_ALLOWED_EMAILS: "me@example.com,partner@example.com",
+            // apps/api/.dev.vars があると vitest-pool-workers もそれを読み込み、
+            // 開発者の手元だけ DEV_BYPASS_EMAIL が入った状態でテストが走ってしまう。
+            // 未認証を前提とするテストが認証済みとして通ってしまうため、ここで打ち消す。
+            // バイパスが必要なテストは app.fetch(request, env) でリクエストごとに指定する。
+            DEV_BYPASS_EMAIL: "",
           },
         },
       };
@@ -4286,12 +4291,12 @@ git commit -m "feat: 単発割り勘の events API を追加"
 - Consumes: これまでの全タスク
 - Produces: なし
 
-- [ ] **Step 1: 全テストを通す**
+- [x] **Step 1: 全テストを通す**
 
 Run: `npm test`
-Expected: shared 31 + api 73 = 104 tests すべて PASS
+Expected: shared 31 + api 76 = 107 tests すべて PASS
 
-- [ ] **Step 2: ローカル開発用の環境変数サンプルを作る**
+- [x] **Step 2: ローカル開発用の環境変数サンプルを作る**
 
 `apps/api/.dev.vars.example`:
 
@@ -4305,7 +4310,12 @@ ACCESS_TEAM_DOMAIN="example.cloudflareaccess.com"
 ACCESS_AUD="local-dev"
 ```
 
-- [ ] **Step 3: ローカルで Worker を起動して動作を確認する**
+`.dev.vars` を作ると `vitest-pool-workers` もこれを読み込む。Task 7 の `vitest.config.ts` で
+`DEV_BYPASS_EMAIL: ""` を明示して打ち消してあるため、`.dev.vars` の有無でテスト結果は変わらない
+（両方の状態で 76 tests 通ることを実測で確認済み）。この打ち消しを外すと、
+`.dev.vars` を持つ開発者の手元でだけ「未認証で 403」を期待するテストが 404 になって落ちる。
+
+- [x] **Step 3: ローカルで Worker を起動して動作を確認する**
 
 ```bash
 cp apps/api/.dev.vars.example apps/api/.dev.vars
@@ -4323,9 +4333,15 @@ curl -s http://localhost:8787/api/categories
 
 Expected: 順に `{"ok":true,"data":{"status":"ok"}}`、自分のユーザー情報、カテゴリ7件
 
-確認できたら Ctrl+C で停止する。
+確認できたら停止する。**Ctrl+C だけでは子の `workerd` が残り、親プロセスが生きていると再生成される**（実測で確認済み）。`wrangler.js` → `wrangler-dist/cli.js` → `workerd` のツリーを親から順に落とすこと。
 
-- [ ] **Step 4: README を書く**
+`workerd` を名前だけで一括終了しないこと。このマシンでは別プロジェクト（`kakei-dashboard-3`）の `wrangler dev` も同じポート 8787 で常駐しており、巻き込むと他の作業を壊す。次のように warikan のパスで絞って特定する。
+
+```bash
+powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { \$_.CommandLine -like '*warikan*' -and \$_.Name -in @('node.exe','workerd.exe') } | Select-Object ProcessId,ParentProcessId,Name,CreationDate"
+```
+
+- [x] **Step 4: README を書く**
 
 `README.md`（既存が無ければ新規作成）:
 
@@ -4367,11 +4383,11 @@ Expected: 順に `{"ok":true,"data":{"status":"ok"}}`、自分のユーザー情
 いずれも均等割りで、送金回数が最小になるように精算する。
 ```
 
-- [ ] **Step 5: CLAUDE.md を現状に合わせる**
+- [x] **Step 5: CLAUDE.md を現状に合わせる**
 
 `CLAUDE.md` の「アーキテクチャ」節を、Flask の説明から現構成の説明に差し替える。`legacy/` の説明は残す。「アプリの起動方法」を `npm run dev -w @warikan/api` に更新する。
 
-- [ ] **Step 6: コミット**
+- [x] **Step 6: コミット**
 
 ```bash
 git add -A

@@ -25,6 +25,32 @@
 | `docs/superpowers/plans` | 実装計画 |
 | `.claude/agents` | プロジェクト固有のサブエージェント |
 
+## 開発コマンド
+
+```bash
+npm install
+```
+
+```bash
+cp apps/api/.dev.vars.example apps/api/.dev.vars
+```
+
+```bash
+npm run migrate:local -w @warikan/api
+```
+
+```bash
+npm run dev -w @warikan/api
+```
+
+`http://localhost:8787` で立つ。`npm test` で全テスト（`packages/shared` と `apps/api`）、`npm run typecheck` で型チェック。
+
+`.dev.vars` の `DEV_BYPASS_EMAIL` は Access の JWT 検証を飛ばすだけで、`ACCESS_ALLOWED_EMAILS` の許可リストは常に効く。
+
+**`wrangler dev` の停止に注意**: Ctrl+C やプロセス終了だけでは子の `workerd` が残り、親が生きていると再生成される。停止するときは `wrangler.js` → `wrangler-dist/cli.js` → `workerd` のツリーを親から順に落とす。このマシンでは別プロジェクト（`kakei-dashboard-3`）の `wrangler dev` も同じポート 8787 で常駐しているため、PID をコマンドラインとパスで確認してから落とすこと。`workerd` を名前だけで一括終了しない。
+
+カバレッジは v8 プロバイダが workerd 上で動かない（`node:inspector/promises` を解決できない）。計測するときは `@vitest/coverage-istanbul` を入れて `--coverage.provider=istanbul` を使う。
+
 ## 移行の要点
 
 **認証**: Cloudflare Access で `warikan.y-kakeibo.workers.dev` を保護し、許可メール2件のみ通す。Worker 側は `Cf-Access-Jwt-Assertion` の JWT を JWKS で検証してからメールを取り出す。`Cf-Access-Authenticated-User-Email` ヘッダは Access を経由しないリクエストで詐称できるため信用しない。

@@ -1,0 +1,7 @@
+# ローカル開発用。このファイルをコピーして .dev.vars を作る（.dev.vars は gitignore 済み）
+# DEV_BYPASS_EMAIL を設定すると Cloudflare Access の JWT 検証を飛ばす。
+# ただし ACCESS_ALLOWED_EMAILS に含まれないメールは変わらず 403 になる。
+DEV_BYPASS_EMAIL="me@example.com"
+ACCESS_ALLOWED_EMAILS="me@example.com,partner@example.com"
+ACCESS_TEAM_DOMAIN="example.cloudflareaccess.com"
+ACCESS_AUD="local-dev"
