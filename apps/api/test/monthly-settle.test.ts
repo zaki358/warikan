@@ -82,6 +82,21 @@ describe("POST /api/monthly/:ym/settle", () => {
     ]);
   });
 
+  it("同額のカテゴリは名前のコードユニット昇順で並ぶ", async () => {
+    const me = await userId(ALLOWED_EMAIL);
+
+    await add(me, 5000, 1);
+    await add(me, 5000, 2);
+
+    const body = await jsonBody<Envelope<Snapshot>>(
+      await authedFetch("/api/monthly/2026-08/settle", { method: "POST" }),
+    );
+
+    // 日 (U+65E5) < 食 (U+98DF) なので、ロケールに依らず日用品が先に来る。
+    // localeCompare を使うと環境の ICU データ次第で順序が変わりうる。
+    expect(body.data?.byCategory.map((entry) => entry.name)).toEqual(["日用品", "食費"]);
+  });
+
   it("確定すると status が settled になり is_dirty が下りる", async () => {
     const me = await userId(ALLOWED_EMAIL);
     await add(me, 1000, 1);

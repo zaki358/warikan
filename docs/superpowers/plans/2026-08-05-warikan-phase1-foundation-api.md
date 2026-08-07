@@ -3126,7 +3126,7 @@ git commit -m "feat: 月次の支出 CRUD と is_dirty の伝播を追加"
   - `updateSnapshotJson(db, periodId, snapshotJson: string): Promise<void>`
   - `readSnapshot(period: MonthlyPeriodRow): Snapshot | null`
 
-- [ ] **Step 1: 失敗するテストを書く**
+- [x] **Step 1: 失敗するテストを書く**
 
 `apps/api/test/monthly-settle.test.ts`:
 
@@ -3213,6 +3213,21 @@ describe("POST /api/monthly/:ym/settle", () => {
       { categoryId: 1, name: "食費", amount: 7000 },
       { categoryId: 2, name: "日用品", amount: 5000 },
     ]);
+  });
+
+  it("同額のカテゴリは名前のコードユニット昇順で並ぶ", async () => {
+    const me = await userId(ALLOWED_EMAIL);
+
+    await add(me, 5000, 1);
+    await add(me, 5000, 2);
+
+    const body = await jsonBody<Envelope<Snapshot>>(
+      await authedFetch("/api/monthly/2026-08/settle", { method: "POST" }),
+    );
+
+    // 日 (U+65E5) < 食 (U+98DF) なので、ロケールに依らず日用品が先に来る。
+    // localeCompare を使うと環境の ICU データ次第で順序が変わりうる。
+    expect(body.data?.byCategory.map((entry) => entry.name)).toEqual(["日用品", "食費"]);
   });
 
   it("確定すると status が settled になり is_dirty が下りる", async () => {
@@ -3346,12 +3361,12 @@ describe("PATCH /api/monthly/:ym/result/transfers/:index", () => {
 });
 ```
 
-- [ ] **Step 2: テストを実行して失敗することを確認する**
+- [x] **Step 2: テストを実行して失敗することを確認する**
 
 Run: `npm test -w @warikan/api`
 Expected: FAIL — settle / result 系が 404
 
-- [ ] **Step 3: スナップショット生成サービスを書く**
+- [x] **Step 3: スナップショット生成サービスを書く**
 
 `apps/api/src/services/settle.ts`:
 
@@ -3464,7 +3479,7 @@ export function readSnapshot(period: MonthlyPeriodRow): Snapshot | null {
 }
 ```
 
-- [ ] **Step 4: スナップショット保存のクエリを追加する**
+- [x] **Step 4: スナップショット保存のクエリを追加する**
 
 `apps/api/src/db/monthly.ts` の末尾に追記:
 
@@ -3493,7 +3508,7 @@ export async function updateSnapshotJson(
 }
 ```
 
-- [ ] **Step 5: settle / result のルートを追加する**
+- [x] **Step 5: settle / result のルートを追加する**
 
 `apps/api/src/routes/monthly.ts` の import に追加:
 
@@ -3562,14 +3577,14 @@ monthlyRoutes.patch("/:ym/result/transfers/:index", async (c) => {
 
 `/:ym/result` と `/:ym/settle` は `/:ym` より後に登録しても、Hono はパスセグメント数で区別するため衝突しない。
 
-- [ ] **Step 6: テストを実行して成功することを確認する**
+- [x] **Step 6: テストを実行して成功することを確認する**
 
 Run: `npm test -w @warikan/api`
-Expected: PASS（55 tests）
+Expected: PASS（既存 45 + monthly-settle 13 = 58 tests）
 
-`byCategory` の順序テストが落ちる場合、同額のときの tie-break（名前のコードユニット昇順）が実装と一致しているか確認する。「食費」と「日用品」はどちらも 5000 円なので、`compareStr` の結果で順序が決まる。
+`byCategory` の順序は2つのテストで守る。金額が異なるケース（食費 7000 / 日用品 5000）は金額降順を、金額が同じケース（どちらも 5000）は tie-break を検証する。tie-break は `compareStr`（コードユニット比較）で、日 (U+65E5) < 食 (U+98DF) なので日用品が先に来る。金額が異なるテストだけでは tie-break を一切通らず、逆順に壊しても検出できない（実測で確認済み）。
 
-- [ ] **Step 7: コミット**
+- [x] **Step 7: コミット**
 
 ```bash
 git add apps/api
