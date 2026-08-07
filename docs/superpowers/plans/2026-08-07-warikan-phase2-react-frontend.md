@@ -213,7 +213,7 @@ apps/web/
 - Consumes: なし
 - Produces: `apps/web` ワークスペース（`@warikan/web`）。`npm run dev -w @warikan/web` で Vite が起動し、`npm test` に web のテストが含まれる
 
-- [ ] **Step 1: package.json を作る**
+- [x] **Step 1: package.json を作る**
 
 `apps/web/package.json`:
 
@@ -234,7 +234,7 @@ apps/web/
 }
 ```
 
-- [ ] **Step 2: 依存をインストールする**
+- [x] **Step 2: 依存をインストールする**
 
 ```bash
 npm install react react-dom react-router @tanstack/react-query -w @warikan/web
@@ -250,7 +250,7 @@ npm install @warikan/shared -w @warikan/web
 
 `react-router-dom` は**インストールしない**。react-router 8 ではすべて `react-router` から import する。
 
-- [ ] **Step 3: tsconfig を作る**
+- [x] **Step 3: tsconfig を作る**
 
 `apps/web/tsconfig.json`:
 
@@ -266,7 +266,7 @@ npm install @warikan/shared -w @warikan/web
 }
 ```
 
-- [ ] **Step 4: Vite の設定を書く**
+- [x] **Step 4: Vite の設定を書く**
 
 `apps/web/vite.config.ts`:
 
@@ -295,7 +295,7 @@ export default defineConfig({
 });
 ```
 
-- [ ] **Step 5: Vitest の設定を書く**
+- [x] **Step 5: Vitest の設定を書く**
 
 `apps/web/vitest.config.ts`:
 
@@ -320,7 +320,7 @@ export default defineConfig({
 import "@testing-library/jest-dom/vitest";
 ```
 
-- [ ] **Step 6: エントリと最小のアプリを書く**
+- [x] **Step 6: エントリと最小のアプリを書く**
 
 `apps/web/index.html`:
 
@@ -372,7 +372,7 @@ createRoot(root).render(
 );
 ```
 
-- [ ] **Step 7: デザイントークンを移植する**
+- [x] **Step 7: デザイントークンを移植する**
 
 `apps/web/src/styles.css`（`legacy/templates/base.html` の `<style>` から踏襲。値は変えない）:
 
@@ -514,7 +514,7 @@ button:focus-visible {
 }
 ```
 
-- [ ] **Step 8: スモークテストを書く**
+- [x] **Step 8: スモークテストを書く**
 
 `apps/web/src/smoke.test.tsx`:
 
@@ -533,7 +533,7 @@ describe("App", () => {
 });
 ```
 
-- [ ] **Step 9: .gitignore に Vite の生成物を追加する**
+- [x] **Step 9: .gitignore に Vite の生成物を追加する**
 
 `.gitignore` に追記:
 
@@ -541,7 +541,7 @@ describe("App", () => {
 apps/web/dist/
 ```
 
-- [ ] **Step 10: テストと型チェックを通す**
+- [x] **Step 10: テストと型チェックを通す**
 
 Run: `npm test -w @warikan/web`
 Expected: PASS（1 test）
@@ -552,12 +552,12 @@ Expected: エラーなし
 Run: `npm test`
 Expected: 既存の 107 tests と合わせて 108 tests すべて PASS
 
-- [ ] **Step 11: ビルドが通ることを確認する**
+- [x] **Step 11: ビルドが通ることを確認する**
 
 Run: `npm run build -w @warikan/web`
 Expected: `apps/web/dist/index.html` と `apps/web/dist/assets/*.js` が生成される
 
-- [ ] **Step 12: コミット**
+- [x] **Step 12: コミット**
 
 ```bash
 git add apps/web .gitignore package-lock.json
