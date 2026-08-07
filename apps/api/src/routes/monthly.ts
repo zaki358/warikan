@@ -10,13 +10,16 @@ import {
   insertExpense,
   listExpenses,
   listPeriods,
+  saveSnapshot,
   updateExpense,
+  updateSnapshotJson,
 } from "../db/monthly.js";
 import type { MonthlyExpenseRow, MonthlyPeriodRow } from "../db/rows.js";
 import { findUserById } from "../db/users.js";
 import type { AppEnv } from "../env.js";
 import { fail, ok } from "../lib/response.js";
 import { daysInMonth, formatYm, parseYm } from "../lib/ym.js";
+import { buildSnapshot, mergeIsPaid, readSnapshot } from "../services/settle.js";
 
 export const monthlyRoutes = new Hono<AppEnv>();
 
@@ -168,4 +171,58 @@ monthlyRoutes.delete("/expenses/:id", async (c) => {
   await deleteExpense(c.env.DB, existing.id, existing.period_id);
 
   return c.json(ok({ id: existing.id }));
+});
+
+const isPaidSchema = z.object({ isPaid: z.boolean() });
+
+monthlyRoutes.post("/:ym/settle", async (c) => {
+  const parsedYm = parseYm(c.req.param("ym"));
+  if (!parsedYm) return c.json(invalidYm(), 400);
+
+  const period = await getOrCreatePeriod(c.env.DB, parsedYm.year, parsedYm.month);
+  const previous = readSnapshot(period);
+  const snapshot = mergeIsPaid(await buildSnapshot(c.env.DB, period), previous);
+
+  await saveSnapshot(c.env.DB, period.id, JSON.stringify(snapshot));
+
+  return c.json(ok(snapshot));
+});
+
+monthlyRoutes.get("/:ym/result", async (c) => {
+  const parsedYm = parseYm(c.req.param("ym"));
+  if (!parsedYm) return c.json(invalidYm(), 400);
+
+  const period = await getOrCreatePeriod(c.env.DB, parsedYm.year, parsedYm.month);
+  const snapshot = readSnapshot(period);
+  if (!snapshot) return c.json(fail("NOT_FOUND", "まだ計算されていません"), 404);
+
+  return c.json(ok({ snapshot, isDirty: period.is_dirty === 1 }));
+});
+
+monthlyRoutes.patch("/:ym/result/transfers/:index", async (c) => {
+  const parsedYm = parseYm(c.req.param("ym"));
+  if (!parsedYm) return c.json(invalidYm(), 400);
+
+  const parsed = isPaidSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) return c.json(fail("VALIDATION_ERROR", "isPaid は真偽値で指定してください"), 400);
+
+  const period = await getOrCreatePeriod(c.env.DB, parsedYm.year, parsedYm.month);
+  const snapshot = readSnapshot(period);
+  if (!snapshot) return c.json(fail("NOT_FOUND", "まだ計算されていません"), 404);
+
+  const index = Number(c.req.param("index"));
+  if (!Number.isInteger(index) || index < 0 || index >= snapshot.transfers.length) {
+    return c.json(fail("NOT_FOUND", "該当する送金がありません"), 404);
+  }
+
+  const updated = {
+    ...snapshot,
+    transfers: snapshot.transfers.map((transfer, position) =>
+      position === index ? { ...transfer, isPaid: parsed.data.isPaid } : transfer,
+    ),
+  };
+
+  await updateSnapshotJson(c.env.DB, period.id, JSON.stringify(updated));
+
+  return c.json(ok(updated));
 });

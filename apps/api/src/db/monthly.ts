@@ -135,3 +135,26 @@ export async function deleteExpense(db: D1Database, id: string, periodId: string
     markDirtyStatement(db, periodId),
   ]);
 }
+
+export async function saveSnapshot(db: D1Database, periodId: string, snapshotJson: string): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE monthly_periods
+          SET snapshot_json = ?, status = 'settled', is_dirty = 0, settled_at = ?
+        WHERE id = ?`,
+    )
+    .bind(snapshotJson, nowIso(), periodId)
+    .run();
+}
+
+/** 支払い済みフラグの更新。status と is_dirty には触れない。 */
+export async function updateSnapshotJson(
+  db: D1Database,
+  periodId: string,
+  snapshotJson: string,
+): Promise<void> {
+  await db
+    .prepare("UPDATE monthly_periods SET snapshot_json = ? WHERE id = ?")
+    .bind(snapshotJson, periodId)
+    .run();
+}
