@@ -5,6 +5,7 @@ import { ok } from "./lib/response.js";
 import { accessAuth } from "./middleware/auth.js";
 import { onError } from "./middleware/errors.js";
 import { categoryRoutes } from "./routes/categories.js";
+import { eventRoutes } from "./routes/events.js";
 import { meRoutes } from "./routes/me.js";
 import { monthlyRoutes } from "./routes/monthly.js";
 
@@ -19,6 +20,7 @@ app.use("/api/*", accessAuth());
 app.route("/api/me", meRoutes);
 app.route("/api/categories", categoryRoutes);
 app.route("/api/monthly", monthlyRoutes);
+app.route("/api/events", eventRoutes);
 
 app.notFound((c) => c.json({ ok: false, error: { code: "NOT_FOUND", message: "見つかりません" } }, 404));
 
