@@ -6,6 +6,7 @@ import { accessAuth } from "./middleware/auth.js";
 import { onError } from "./middleware/errors.js";
 import { categoryRoutes } from "./routes/categories.js";
 import { meRoutes } from "./routes/me.js";
+import { monthlyRoutes } from "./routes/monthly.js";
 
 const app = new Hono<AppEnv>();
 
@@ -17,6 +18,7 @@ app.use("/api/*", accessAuth());
 
 app.route("/api/me", meRoutes);
 app.route("/api/categories", categoryRoutes);
+app.route("/api/monthly", monthlyRoutes);
 
 app.notFound((c) => c.json({ ok: false, error: { code: "NOT_FOUND", message: "見つかりません" } }, 404));
 
