@@ -2090,7 +2090,7 @@ git commit -m "feat: Cloudflare Access の JWT 検証ミドルウェアとユー
   - `categoryRoutes: Hono<AppEnv>` — `GET /`
   - `listActiveCategories(db): Promise<CategoryRow[]>`
 
-- [ ] **Step 1: 失敗するテストを書く**
+- [x] **Step 1: 失敗するテストを書く**
 
 `apps/api/test/me.test.ts`:
 
@@ -2202,12 +2202,12 @@ describe("GET /api/categories", () => {
 });
 ```
 
-- [ ] **Step 2: テストを実行して失敗することを確認する**
+- [x] **Step 2: テストを実行して失敗することを確認する**
 
 Run: `npm test -w @warikan/api`
 Expected: FAIL — `PATCH /api/me` と `GET /api/categories` が 404
 
-- [ ] **Step 3: categories のクエリを書く**
+- [x] **Step 3: categories のクエリを書く**
 
 `apps/api/src/db/categories.ts`:
 
@@ -2230,7 +2230,7 @@ export async function categoryExists(db: D1Database, id: number): Promise<boolea
 }
 ```
 
-- [ ] **Step 4: ルートを書く**
+- [x] **Step 4: ルートを書く**
 
 `apps/api/src/routes/me.ts`:
 
@@ -2284,7 +2284,7 @@ categoryRoutes.get("/", async (c) => {
 });
 ```
 
-- [ ] **Step 5: ルートを登録する**
+- [x] **Step 5: ルートを登録する**
 
 `apps/api/src/index.ts` の仮の `/api/me` ハンドラを削除し、代わりに次を追加する:
 
@@ -2297,12 +2297,12 @@ app.route("/api/me", meRoutes);
 app.route("/api/categories", categoryRoutes);
 ```
 
-- [ ] **Step 6: テストを実行して成功することを確認する**
+- [x] **Step 6: テストを実行して成功することを確認する**
 
 Run: `npm test -w @warikan/api`
-Expected: PASS（health 4 + auth 7 + me 4 + categories 3 = 18 tests）
+Expected: PASS（health 5 + auth 11 + me 4 + categories 3 = 23 tests）
 
-- [ ] **Step 7: コミット**
+- [x] **Step 7: コミット**
 
 ```bash
 git add apps/api
