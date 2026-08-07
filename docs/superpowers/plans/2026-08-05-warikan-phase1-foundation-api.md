@@ -3610,7 +3610,7 @@ git commit -m "feat: 月次の集計・精算とスナップショット保存�
   - `setSettlementPaid(db, settlementId, isPaid): Promise<void>`
   - `eventRoutes: Hono<AppEnv>`
 
-- [ ] **Step 1: 失敗するテストを書く**
+- [x] **Step 1: 失敗するテストを書く**
 
 `apps/api/test/events.test.ts`:
 
@@ -3854,12 +3854,12 @@ describe("PATCH /api/events/:id/settlements/:settlementId", () => {
 });
 ```
 
-- [ ] **Step 2: テストを実行して失敗することを確認する**
+- [x] **Step 2: テストを実行して失敗することを確認する**
 
 Run: `npm test -w @warikan/api`
 Expected: FAIL — `/api/events` が 404
 
-- [ ] **Step 3: events のクエリを書く**
+- [x] **Step 3: events のクエリを書く**
 
 `apps/api/src/db/events.ts`:
 
@@ -3984,7 +3984,7 @@ export async function setSettlementPaid(db: D1Database, id: string, isPaid: bool
 }
 ```
 
-- [ ] **Step 4: events のルートを書く**
+- [x] **Step 4: events のルートを書く**
 
 `apps/api/src/routes/events.ts`:
 
@@ -4170,7 +4170,7 @@ eventRoutes.patch("/:id/settlements/:settlementId", async (c) => {
 });
 ```
 
-- [ ] **Step 5: ルートを登録する**
+- [x] **Step 5: ルートを登録する**
 
 `apps/api/src/index.ts` に追加:
 
@@ -4181,23 +4181,93 @@ import { eventRoutes } from "./routes/events.js";
 app.route("/api/events", eventRoutes);
 ```
 
-- [ ] **Step 6: テストを実行して成功することを確認する**
+- [x] **Step 6: テストを実行して成功することを確認する**
 
 Run: `npm test -w @warikan/api`
-Expected: PASS（73 tests）
+Expected: PASS（既存 58 + events 16 = 74 tests）
 
 「6件以上でも切り捨てない」テストが落ちる場合、`created_at` が ISO 文字列の同一秒に並んで順序が不定になっている可能性がある。`listEventSummaries` の `ORDER BY created_at DESC, id DESC` で決まるが、件数だけを見るテストなので順序は影響しない。件数が7でなければクエリを見直すこと。
 
-- [ ] **Step 7: 型チェックとカバレッジを確認する**
+- [x] **Step 7: 型チェックとカバレッジを確認する**
 
 ```bash
 npm run typecheck -w @warikan/api
-npm test -w @warikan/api -- --coverage
+npm install -D @vitest/coverage-istanbul -w @warikan/api
+npm test -w @warikan/api -- --coverage --coverage.provider=istanbul
 ```
 
 Expected: 型エラーなし。`src/` のカバレッジが 80% 以上
 
-- [ ] **Step 8: コミット**
+**v8 プロバイダは workerd 上で動かない**（実測で確認済み）。`--coverage` をそのまま実行すると
+`Error: No such module "node:inspector/promises"` で全テストがエラーになる。
+istanbul プロバイダを使うこと。
+
+実測の結果、Statements 92% / Functions 92% / Lines 97% に対し **Branches が 75%** で
+閾値に届かなかった。最も低いのは `src/middleware/errors.ts`（Stmts 20% / Funcs 0%）で、
+未捕捉例外の経路が一度も通っていなかった。ここは「内部エラーの詳細をクライアントに
+返さない」という制約を担う場所なので、次のテストを追加する。
+
+`apps/api/test/errors.test.ts`:
+
+```ts
+import { env } from "cloudflare:workers";
+import { Hono } from "hono";
+import { HTTPException } from "hono/http-exception";
+import { describe, expect, it } from "vitest";
+
+import type { AppEnv } from "../src/env.js";
+import { onError } from "../src/middleware/errors.js";
+
+type Envelope = { ok: boolean; error?: { code: string; message: string } };
+
+// db/monthly.ts の getOrCreatePeriod が投げる例外と同じ形。
+// 年月やテーブルの内部事情が含まれており、クライアントに見せてはいけない。
+const INTERNAL_DETAIL = "period not found after insert: 2026-08";
+
+/** onError だけを載せた最小アプリ。本番のルートに影響を与えずに 500 経路を通す。 */
+const probeApp = () => {
+  const app = new Hono<AppEnv>();
+  app.onError(onError);
+  app.get("/boom", () => {
+    throw new Error(INTERNAL_DETAIL);
+  });
+  app.get("/http-error", () => {
+    throw new HTTPException(429, { message: "TOO_MANY_REQUESTS" });
+  });
+
+  return (path: string) => app.fetch(new Request(`https://warikan.test${path}`), { ...env });
+};
+
+describe("未捕捉エラーの扱い", () => {
+  it("想定外の例外は 500 を返し、内部の詳細を含めない", async () => {
+    const res = await probeApp()("/boom");
+    const body = (await res.json()) as Envelope;
+
+    expect(res.status).toBe(500);
+    expect(body.ok).toBe(false);
+    expect(body.error?.code).toBe("INTERNAL_ERROR");
+    expect(body.error?.message).toBe("処理中にエラーが発生しました");
+
+    const serialized = JSON.stringify(body);
+    expect(serialized).not.toContain(INTERNAL_DETAIL);
+    expect(serialized).not.toContain("period");
+    expect(serialized).not.toContain("Error");
+  });
+
+  it("HTTPException はそのステータスを保つ", async () => {
+    const res = await probeApp()("/http-error");
+    const body = (await res.json()) as Envelope;
+
+    expect(res.status).toBe(429);
+    expect(body.ok).toBe(false);
+  });
+});
+```
+
+これで 76 tests になる。計測用に入れた `@vitest/coverage-istanbul` は、
+恒久的に使わないなら計測後に取り除いてよい。
+
+- [x] **Step 8: コミット**
 
 ```bash
 git add apps/api
