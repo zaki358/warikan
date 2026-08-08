@@ -1035,6 +1035,16 @@ git commit -m "feat: エンベロープを剥がす API クライアントを追
 
 ## Task 4: フォーマッタと年月ユーティリティ
 
+**実施時に判明した計画の不備（実測で確認）:**
+
+1. **`formatYen` が半角 `¥` を保てるのは偶然だった。** `Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY" })` は**全角 `￥`（U+FFE5）**を返す（実測）。表示仕様は半角 `¥`（U+00A5）。計画の実装は `style: "currency"` を使わず区切りだけ Intl に任せているので結果的に正しいが、理由がコードに無く、後から currency 化されると静かに化ける。理由をコメントに明記し、`formatYen(100).codePointAt(0) === 0x00a5` を検証するテストを追加した。負号の位置は Intl も先頭で、食い違うのは記号の文字だけ。
+
+2. **日付のタイムゾーン。** `new Date("2026-08-03")` は UTC 深夜と解釈されるため、`getDay()` などローカル系メソッドで読むと UTC より西で1日ずれる（America/New_York で `8/2(日)` になることを実測）。**JST では偶然通ってしまうので、テストだけでは検知できない。** 方針として「日付文字列由来の値は `Date.UTC` + `getUTC*` で閉じる。例外は `todayYm` / `todayIso` のみ意図的にローカル時刻」を採用し、両ファイルの冒頭にコメントで残した。あわせて `apps/web/vitest.config.ts` に `env: { TZ: "America/New_York" }` を追加し、ローカル系メソッドに戻す実装が必ず落ちるようにした（ミューテーションで3件 FAIL を確認済み）。
+
+3. **`todayYm` / `todayIso` のテストが計画に1件も無かった。** import すらしていない。`vi.useFakeTimers()` + `vi.setSystemTime()` で固定したテストを3件追加。固定値は `new Date(2026, 7, 3, 12, 0, 0)` のようにローカル時刻の年月日で組み立てる（UTC インスタンスで固定すると TZ 次第でずれる）。
+
+4. **`clampToMonth` のテスト名が実装挙動と食い違う。** 計画の `"対象月より前の日付は日を保ったまま対象月に移す"` は通るが、通る理由が名前と違う。実装は**年月を `ym` で置き換え、日は保ったまま 1〜末日に丸める**だけで、1日に寄せる動作はしない（`("2026-07-20", "2026-08")` → `"2026-08-20"`）。目的（月またぎ入力でサーバーが 400 を返すのを送信前に防ぐ）は満たしているので実装はそのままとし、実挙動どおりのテスト名に直したうえで doc コメントに明記した。境界（月初・月末・うるう年 2028-02-29・平年 2026-02-29→02-28・日が読めない入力）も追加で通してある。
+
 **Files:**
 - Create: `apps/web/src/lib/format.ts`, `apps/web/src/lib/ym.ts`
 - Create: `apps/web/src/lib/format.test.ts`, `apps/web/src/lib/ym.test.ts`
@@ -1048,7 +1058,7 @@ git commit -m "feat: エンベロープを剥がす API クライアントを追
   - `todayYm(): string` / `shiftYm(ym: string, delta: number): string` / `ymLabel(ym: string): string`
   - `clampToMonth(dateIso: string, ym: string): string`
 
-- [ ] **Step 1: 失敗するテストを書く**
+- [x] **Step 1: 失敗するテストを書く**
 
 `apps/web/src/lib/format.test.ts`:
 
@@ -1138,7 +1148,7 @@ describe("clampToMonth", () => {
     expect(clampToMonth("2026-08-15", "2026-08")).toBe("2026-08-15");
   });
 
-  it("別の月の日付はその月の1日に寄せる", () => {
+  it("対象月より前の日付は日を保ったまま対象月に移す", () => {
     expect(clampToMonth("2026-09-01", "2026-08")).toBe("2026-08-01");
   });
 
@@ -1149,12 +1159,12 @@ describe("clampToMonth", () => {
 });
 ```
 
-- [ ] **Step 2: テストを実行して失敗することを確認する**
+- [x] **Step 2: テストを実行して失敗することを確認する**
 
 Run: `npm test -w @warikan/web`
 Expected: FAIL — `./format.js` と `./ym.js` が解決できない
 
-- [ ] **Step 3: フォーマッタを実装する**
+- [x] **Step 3: フォーマッタを実装する**
 
 `apps/web/src/lib/format.ts`:
 
@@ -1249,12 +1259,12 @@ export function clampToMonth(dateIso: string, ym: string): string {
 }
 ```
 
-- [ ] **Step 4: テストを実行して成功することを確認する**
+- [x] **Step 4: テストを実行して成功することを確認する**
 
 Run: `npm test -w @warikan/web`
-Expected: PASS（smoke 1 + api 8 + format 9 + ym 8 = 26 tests）
+Expected: PASS（smoke 1 + api 8 + format 10 + ym 18 = 37 tests。format/ym は計画より多い。上記「実施時に判明した計画の不備」参照）
 
-- [ ] **Step 5: 型チェックとコミット**
+- [x] **Step 5: 型チェックとコミット**
 
 ```bash
 npm run typecheck -w @warikan/web
@@ -1721,7 +1731,7 @@ describe("ルーティング", () => {
 - [ ] **Step 7: テストを実行する**
 
 Run: `npm test -w @warikan/web`
-Expected: PASS（smoke 1 + api 8 + format 9 + ym 8 + ルーティング 5 = 31 tests）
+Expected: PASS（smoke 1 + api 8 + format 10 + ym 18 + ルーティング 5 = 42 tests）
 
 - [ ] **Step 8: 型チェックとコミット**
 
@@ -4008,7 +4018,7 @@ git commit -m "feat: 単発割り勘の結果画面とホームを追加"
 - [ ] **Step 1: 全テストと型チェックを通す**
 
 Run: `npm test`
-Expected: shared 31 + api 76 + web 64 = 171 tests すべて PASS
+Expected: shared 31 + api 76 + web 75 = 182 tests すべて PASS
 
 Run: `npm run typecheck`
 Expected: エラーなし
