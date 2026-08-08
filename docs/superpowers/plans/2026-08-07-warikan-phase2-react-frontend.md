@@ -2816,6 +2816,30 @@ git commit -m "feat: 月次の精算結果画面と is_dirty 警告を追加"
 
 状態遷移だけを純関数として切り出し、テストする。React に依存させない。
 
+**実施時に判明した不備（すべてミューテーションで確認）:**
+
+1. **メンバー削除で品目の支払者がすり替わる経路がテストされていなかった（テスト追加で解消）。** 品目は支払者を配列の index で参照するため、メンバーを消すと後ろの index がずれる。計画の実装は補正しているが、**テストは「消したメンバー自身が支払者だった」等値の経路しか通しておらず**、`paidByIndex > 削除index` のシフト経路は素通しだった。実際、シフト補正を丸ごと削るミューテーションが**生き残った**。支払者より前のメンバーを消すと品目が別人の支払いになる、金額の帰属が狂う不具合。支払者を index ではなく**名前で検証する**テストを2件追加して解消。
+   - なお `item.paidByIndex > action.index` の `>` を `>=` にするミューテーションは生き残るが、これは等値ケースが直前の分岐で early return されるため**等価変異**であり、テストの穴ではない。
+
+2. **不変性のテストが皆無だった（テスト追加で解消）。** reducer 自体は `push` / `splice` / 代入を使っていないが、それを守る仕組みが無かった。入力 state を deep-freeze して全12アクションを通すテストと、同じ `(state, action)` が2回とも等しい結果を返す決定性テストを追加。`addMember` を `push` に、`removeMember` を `splice` に、`setMemberName` を代入に変えるミューテーションが、いずれもこの追加分によってのみ落ちる。
+
+3. **金額未入力の品目が ¥0 として黙って登録される（修正済み）。** `wizardErrors` は品目名の空欄を弾くのに**金額の空欄を検査していなかった**。未入力（`""`）は `toCreatePayload` で `0` に変換され、API の zod（`amount: z.number().int().min(0)`）も通す。合計が変わらないぶん気づきにくい。`品目の金額を入力してください` を追加した。0 の明示的な入力は通す（0円の記録は妨げない）。
+
+**計画が扱っていない境界（報告のみ。仕様を足していない）:**
+
+| 項目 | ウィザード側 | API 側 | 起きること |
+|---|---|---|---|
+| 品目数 | 上限なし | `items.max(200)` | 201件目以降で 400 |
+| 参加者名の長さ | 上限なし | `name.max(30)` | 31文字以上で 400 |
+| タイトルの長さ | 上限なし | `title.max(60)` | 61文字以上で 400 |
+| 金額の上限 | 検査なし | `.max(10_000_000)` | 超過で 400 |
+
+いずれも `ErrorBanner` にサーバーの汎用メッセージしか出ない（Task 7 の所見5と同根）。
+
+**確認して問題なかったもの:** `toCreatePayload` のキーは `POST /api/events` の zod と完全一致。1人のとき削除不可・上限20人・空白だけの名前を弾く、はいずれも計画どおり動く。`paidByIndex` は常に範囲内に保たれるので API 側の範囲チェックには当たらない。
+
+**Step 4 の期待件数 62 は二重に古い**（既存が 65 で、かつ追加分がある）。実際は web 99 件。
+
 **Files:**
 - Create: `apps/web/src/features/events/wizardReducer.ts`
 - Create: `apps/web/src/features/events/wizardReducer.test.ts`
@@ -2829,7 +2853,7 @@ git commit -m "feat: 月次の精算結果画面と is_dirty 警告を追加"
   - `toCreatePayload(state): CreateEventPayload`
   - `wizardErrors(state): string[]`
 
-- [ ] **Step 1: 失敗するテストを書く**
+- [x] **Step 1: 失敗するテストを書く**
 
 `apps/web/src/features/events/wizardReducer.test.ts`:
 
@@ -3049,12 +3073,12 @@ describe("toCreatePayload", () => {
 });
 ```
 
-- [ ] **Step 2: テストを実行して失敗することを確認する**
+- [x] **Step 2: テストを実行して失敗することを確認する**
 
 Run: `npm test -w @warikan/web`
 Expected: FAIL — `./wizardReducer.js` が解決できない
 
-- [ ] **Step 3: reducer を実装する**
+- [x] **Step 3: reducer を実装する**
 
 `apps/web/src/features/events/wizardReducer.ts`:
 
@@ -3214,12 +3238,12 @@ export function toCreatePayload(state: WizardState): CreateEventPayload {
 }
 ```
 
-- [ ] **Step 4: テストを実行して成功することを確認する**
+- [x] **Step 4: テストを実行して成功することを確認する**
 
 Run: `npm test -w @warikan/web`
-Expected: PASS（既存 45 + wizardReducer 17 = 62 tests）
+Expected: PASS（web 99 tests。上記を参照）
 
-- [ ] **Step 5: 型チェックとコミット**
+- [x] **Step 5: 型チェックとコミット**
 
 ```bash
 npm run typecheck -w @warikan/web
@@ -4077,7 +4101,7 @@ git commit -m "feat: 単発割り勘の結果画面とホームを追加"
 - [ ] **Step 1: 全テストと型チェックを通す**
 
 Run: `npm test`
-Expected: shared 31 + api 76 + web 82 = 189 tests すべて PASS
+Expected: shared 31 + api 76 + web 116 = 223 tests すべて PASS
 
 Run: `npm run typecheck`
 Expected: エラーなし

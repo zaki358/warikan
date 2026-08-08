@@ -234,6 +234,35 @@ describe("wizardErrors", () => {
     expect(wizardErrors(state)).toContain("品目名を入力してください");
   });
 
+  // 品目名の空欄は弾くのに金額の空欄を素通しすると、入れ忘れが ¥0 の品目として
+  // 黙って登録される。合計が変わらないぶん気づきにくい。
+  it("金額が未入力の品目があれば通さない", () => {
+    const state = reduce(
+      initialWizardState(),
+      { type: "setMemberName", index: 0, name: "田中" },
+      { type: "setMemberName", index: 1, name: "佐藤" },
+      { type: "setMode", mode: "items" },
+      { type: "addItem" },
+      { type: "setItemName", index: 0, name: "宿代" },
+    );
+
+    expect(wizardErrors(state)).toContain("品目の金額を入力してください");
+  });
+
+  it("金額が 0 の品目は通す（0 円の記録は妨げない）", () => {
+    const state = reduce(
+      initialWizardState(),
+      { type: "setMemberName", index: 0, name: "田中" },
+      { type: "setMemberName", index: 1, name: "佐藤" },
+      { type: "setMode", mode: "items" },
+      { type: "addItem" },
+      { type: "setItemName", index: 0, name: "宿代" },
+      { type: "setItemAmount", index: 0, amount: 0 },
+    );
+
+    expect(wizardErrors(state)).toEqual([]);
+  });
+
   it("同名の参加者がいても通る", () => {
     const state = reduce(
       initialWizardState(),

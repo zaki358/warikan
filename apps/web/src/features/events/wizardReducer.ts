@@ -126,6 +126,11 @@ export function wizardErrors(state: WizardState): string[] {
     if (state.items.some((item) => item.name.trim().length === 0)) {
       errors.push("品目名を入力してください");
     }
+    // 未入力（""）は 0 として送られるため、弾かないと入れ忘れが ¥0 の品目として
+    // 黙って登録される。合計が変わらないぶん気づきにくい。0 の明示的な入力は通す。
+    if (state.items.some((item) => item.amount === "")) {
+      errors.push("品目の金額を入力してください");
+    }
   }
 
   return errors;
