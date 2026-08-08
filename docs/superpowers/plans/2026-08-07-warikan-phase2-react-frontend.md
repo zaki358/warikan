@@ -750,7 +750,15 @@ git commit -m "feat: Worker から SPA を配信し /api/* だけ Worker に振�
   - `apiSend<T>(method: string, path: string, body?: unknown): Promise<T>`
   - `apps/web/src/lib/types.ts` に上記「既存 API の契約」の型
 
-- [ ] **Step 1: 型を定義する**
+**実施時に判明した計画の不備（2件、修正済み）:**
+
+1. **Step 2 のテストコードは型チェックが通らない。** `vi.fn(async () => ...)` を引数ゼロで宣言しているため `spy.mock.calls[0]` の型が空タプル `[]` になり、`const [, init] = ...` が TS2493 で落ちる（計6件）。モックを `vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => ...)` と fetch のシグネチャで宣言して解消した。**Task 4 以降で同じ形のモックを書くときも同じ宣言にすること。**
+
+2. **`fetch` 自体が reject する経路が ApiError にならない。** 計画の実装は `await fetch(...)` を try で囲んでいないため、オフライン・DNS 失敗・接続中断では生の `TypeError("Failed to fetch")` がそのまま伝播する。実測で確認済み（`isApiError = false`）。UI に英語のメッセージが出るうえ、呼び出し側の `instanceof ApiError` による分岐から漏れる。`fetch` を try で囲み `new ApiError("NETWORK_ERROR", FALLBACK_MESSAGE, 0)` に正規化した（応答が無いので status は 0）。テストも1件追加。
+
+**ミューテーションで検証済み:** エラーエンベロープの分岐 `if (!envelope.ok)` を殺すと3件、非 JSON 応答の本文を `message` に入れると1件が落ちる。テストは実際に効いている。
+
+- [x] **Step 1: 型を定義する**
 
 `apps/web/src/lib/types.ts`:
 
@@ -834,7 +842,7 @@ export type CreateEventPayload = {
 };
 ```
 
-- [ ] **Step 2: 失敗するテストを書く**
+- [x] **Step 2: 失敗するテストを書く**
 
 `apps/web/src/lib/api.test.ts`:
 
@@ -934,12 +942,12 @@ describe("apiSend", () => {
 });
 ```
 
-- [ ] **Step 3: テストを実行して失敗することを確認する**
+- [x] **Step 3: テストを実行して失敗することを確認する**
 
 Run: `npm test -w @warikan/web`
 Expected: FAIL — `Failed to resolve import "./api.js"`
 
-- [ ] **Step 4: API クライアントを実装する**
+- [x] **Step 4: API クライアントを実装する**
 
 `apps/web/src/lib/api.ts`:
 
@@ -1007,12 +1015,12 @@ export const apiSend = <T>(method: string, path: string, body?: unknown): Promis
   );
 ```
 
-- [ ] **Step 5: テストを実行して成功することを確認する**
+- [x] **Step 5: テストを実行して成功することを確認する**
 
 Run: `npm test -w @warikan/web`
-Expected: PASS（smoke 1 + api 7 = 8 tests）
+Expected: PASS（smoke 1 + api 8 = 9 tests。api は計画の7件 + 通信失敗の1件）
 
-- [ ] **Step 6: 型チェックとコミット**
+- [x] **Step 6: 型チェックとコミット**
 
 ```bash
 npm run typecheck -w @warikan/web
@@ -1244,7 +1252,7 @@ export function clampToMonth(dateIso: string, ym: string): string {
 - [ ] **Step 4: テストを実行して成功することを確認する**
 
 Run: `npm test -w @warikan/web`
-Expected: PASS（smoke 1 + api 7 + format 9 + ym 8 = 25 tests）
+Expected: PASS（smoke 1 + api 8 + format 9 + ym 8 = 26 tests）
 
 - [ ] **Step 5: 型チェックとコミット**
 
@@ -1713,7 +1721,7 @@ describe("ルーティング", () => {
 - [ ] **Step 7: テストを実行する**
 
 Run: `npm test -w @warikan/web`
-Expected: PASS（api 7 + format 9 + ym 8 + ルーティング 5 = 29 tests）
+Expected: PASS（smoke 1 + api 8 + format 9 + ym 8 + ルーティング 5 = 31 tests）
 
 - [ ] **Step 8: 型チェックとコミット**
 
@@ -4000,7 +4008,7 @@ git commit -m "feat: 単発割り勘の結果画面とホームを追加"
 - [ ] **Step 1: 全テストと型チェックを通す**
 
 Run: `npm test`
-Expected: shared 31 + api 76 + web 63 = 170 tests すべて PASS
+Expected: shared 31 + api 76 + web 64 = 171 tests すべて PASS
 
 Run: `npm run typecheck`
 Expected: エラーなし

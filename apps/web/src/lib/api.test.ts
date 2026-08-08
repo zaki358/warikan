@@ -60,6 +60,24 @@ describe("apiGet", () => {
     expect(error.status).toBe(403);
   });
 
+  it("通信そのものが失敗しても ApiError になり、生の英語メッセージを見せない", async () => {
+    // オフライン・DNS 失敗・接続中断では fetch 自体が TypeError で reject する。
+    // 素通しすると UI に "Failed to fetch" が出るうえ、instanceof ApiError の分岐から漏れる。
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new TypeError("Failed to fetch");
+      }),
+    );
+
+    const error = (await apiGet("/api/me").catch((e: unknown) => e)) as ApiError;
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error.code).toBe("NETWORK_ERROR");
+    expect(error.status).toBe(0);
+    expect(error.message).not.toContain("Failed to fetch");
+  });
+
   it("JSON でない応答でも ApiError になる", async () => {
     mockFetch(502, "<html>Bad Gateway</html>", "text/html");
 

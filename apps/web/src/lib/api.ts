@@ -24,7 +24,16 @@ export class ApiError extends Error {
 const FALLBACK_MESSAGE = "通信に失敗しました。時間をおいて試してください。";
 
 async function request<T>(path: string, init: RequestInit): Promise<T> {
-  const response = await fetch(path, init);
+  let response: Response;
+  try {
+    response = await fetch(path, init);
+  } catch {
+    // オフラインや接続中断では fetch 自体が TypeError で reject する。
+    // 素通しすると UI に英語の "Failed to fetch" が出るうえ、
+    // 呼び出し側の instanceof ApiError による分岐から漏れる。
+    // 応答が無いので status は 0 にする。
+    throw new ApiError("NETWORK_ERROR", FALLBACK_MESSAGE, 0);
+  }
 
   let envelope: Envelope<T> | null = null;
   try {
