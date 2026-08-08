@@ -71,7 +71,7 @@ describe("ResultView", () => {
   it("支払い済みに切り替えると index と isPaid を渡す", async () => {
     const { onToggleTransfer, user } = setup();
 
-    await user.click(screen.getByRole("button", { name: "支払い済みにする" }));
+    await user.click(screen.getByRole("button", { name: /支払い済みにする$/ }));
 
     expect(onToggleTransfer).toHaveBeenCalledWith(0, true);
   });
@@ -83,7 +83,7 @@ describe("ResultView", () => {
     };
     const { onToggleTransfer, user } = setup({ snapshot: paid });
 
-    await user.click(screen.getByRole("button", { name: "未払いに戻す" }));
+    await user.click(screen.getByRole("button", { name: /未払いに戻す$/ }));
 
     expect(onToggleTransfer).toHaveBeenCalledWith(0, false);
   });
@@ -107,5 +107,29 @@ describe("ResultView", () => {
     setup({ snapshot: { ...snapshot, transfers: [] } });
 
     expect(screen.getByText("精算は不要です")).toBeInTheDocument();
+  });
+});
+
+describe("送金の index", () => {
+  // API は PATCH /api/monthly/{ym}/result/transfers/{index} で配列の位置を指す。
+  // 表示側で並べ替えや絞り込みを入れると別の送金を消し込んでしまう。
+  // 月次は2人固定なので送金は1件以下だが、index を渡す契約はここで固定しておく。
+  it("表示順を並べ替えず、配列の位置をそのまま渡す", async () => {
+    const twoTransfers: Snapshot = {
+      ...snapshot,
+      transfers: [
+        { fromId: "u2", toId: "u1", amount: 8850, isPaid: false },
+        { fromId: "u2", toId: "u1", amount: 1200, isPaid: false },
+      ],
+    };
+    const { onToggleTransfer, user } = setup({ snapshot: twoTransfers });
+
+    // 名前で「どの送金か」を指定する。位置で選ぶと、表示を並べ替える実装でも
+    // 「n 番目のボタンに n が渡る」が成り立ってしまい、ずれを検知できない。
+    await user.click(
+      screen.getByRole("button", { name: "妻 から 自分 への ¥1,200を支払い済みにする" }),
+    );
+
+    expect(onToggleTransfer).toHaveBeenCalledWith(1, true);
   });
 });

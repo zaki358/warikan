@@ -67,22 +67,32 @@ export function ResultView({ snapshot, isDirty, isBusy, onRecalculate, onToggleT
         {snapshot.transfers.length === 0 ? (
           <p className="sub">精算は不要です</p>
         ) : (
-          snapshot.transfers.map((transfer, index) => (
-            <div className="list-row" key={`${transfer.fromId}-${transfer.toId}-${index}`}>
-              <div className="grow">
-                💸 {nameByUser.get(transfer.fromId) ?? "?"} → {nameByUser.get(transfer.toId) ?? "?"}
+          snapshot.transfers.map((transfer, index) => {
+            const from = nameByUser.get(transfer.fromId) ?? "?";
+            const to = nameByUser.get(transfer.toId) ?? "?";
+            // どの送金に対する操作かをボタン名に含める。名前が全部同じだと、
+            // 読み上げでも自動テストでも行を区別できず、並べ替えで別の送金を
+            // 消し込む不具合を誰も検知できない（API は配列の index で指すため）。
+            const what = `${from} から ${to} への ${formatYen(transfer.amount)}`;
+
+            return (
+              <div className="list-row" key={`${transfer.fromId}-${transfer.toId}-${index}`}>
+                <div className="grow">
+                  💸 {from} → {to}
+                </div>
+                <div className="amount">{formatYen(transfer.amount)}</div>
+                <Button
+                  variant={transfer.isPaid ? "success" : "secondary"}
+                  size="sm"
+                  disabled={isBusy}
+                  aria-label={`${what}を${transfer.isPaid ? "未払いに戻す" : "支払い済みにする"}`}
+                  onClick={() => onToggleTransfer(index, !transfer.isPaid)}
+                >
+                  {transfer.isPaid ? "未払いに戻す" : "支払い済みにする"}
+                </Button>
               </div>
-              <div className="amount">{formatYen(transfer.amount)}</div>
-              <Button
-                variant={transfer.isPaid ? "success" : "secondary"}
-                size="sm"
-                disabled={isBusy}
-                onClick={() => onToggleTransfer(index, !transfer.isPaid)}
-              >
-                {transfer.isPaid ? "未払いに戻す" : "支払い済みにする"}
-              </Button>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </>

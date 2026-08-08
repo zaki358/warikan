@@ -2478,6 +2478,22 @@ git commit -m "feat: 月次の記録画面を追加"
 
 ## Task 8: 月次の精算結果画面
 
+**実施時に判明したこと（実測とミューテーションで確認）:**
+
+1. **`is_dirty` の警告出し分けはテストで本当に守られている。** 両方向のミューテーションで確認済み。警告を常に出さない版 → 1件 FAIL、常に出す版 → 1件 FAIL。消し込みの向き（`!transfer.isPaid` → `transfer.isPaid`）でも2件 FAIL。
+
+2. **送金の消し込みボタンに名前が無く、並べ替えの不具合を誰も検知できなかった（修正済み）。** API は `PATCH .../transfers/{index}` で**配列の位置**を指す。表示側で並べ替えると別の送金を消し込むが、ボタン名が全行「支払い済みにする」で同一だったため、読み上げでも自動テストでも行を区別できなかった。実際、逆順表示のミューテーションを入れても**位置で選ぶテストは通ってしまう**（「n 番目のボタンに n が渡る」は逆順でも成り立つため）。`aria-label` に「誰から誰への何円か」を含め、テストも名前で選ぶ形に直した。これで逆順ミューテーション・`aria-label` 削除の両方が落ちる。月次は2人固定で送金は1件以下なので今日の実害は無いが、index を渡す契約をここで固定した。
+
+3. **未計算の月（404）は計画がきちんと扱っている。** `useMonthlyResult` が `retry: false`、ルート側で `ApiError` の status 404 を `notCalculated` と判定し、`ErrorBanner` を抑止して「まだ計算していません。「計算する」を押してください。」を出す。作り込み不要だった。
+
+4. **「各人の過不足」は表示しない。** `Snapshot.byUser` は `share` を持つが、画面に出すのは `paid` だけ。設計書 §7.2 のワイヤも `paid` のみなので計画どおり。
+
+5. **Step 5 が `smoke.test.tsx` の更新を書いていない。** `MonthlyResult` を実装に置き換えると仮見出し「月次の精算」が消え、ルーティングテストが1件落ちる。Task 7 の `MonthlyRecord` と同じく、実際の見出し（`:ym` を解釈した「2026年8月の精算」）を見る形に変更した。
+
+6. **`ResultView` / `MonthlyResult` は `useState` を持たない**ため、Task 7 の「クエリ結果を初期値に固定して非決定になる」不具合は構造上起きない。
+
+7. **Step 4 の期待件数 45 は古い。** 実際は web 65 件（計画の 9 件 + index の契約テスト 1 件）。
+
 **Files:**
 - Create: `apps/web/src/features/monthly/ResultView.tsx`
 - Create: `apps/web/src/features/monthly/ResultView.test.tsx`
@@ -2487,7 +2503,7 @@ git commit -m "feat: 月次の記録画面を追加"
 - Consumes: Task 6 のフック、`formatYen` / `percent`（Task 4）
 - Produces: `<ResultView snapshot isDirty isBusy onRecalculate onToggleTransfer />`
 
-- [ ] **Step 1: 失敗するテストを書く**
+- [x] **Step 1: 失敗するテストを書く**
 
 `apps/web/src/features/monthly/ResultView.test.tsx`:
 
@@ -2605,12 +2621,12 @@ describe("ResultView", () => {
 });
 ```
 
-- [ ] **Step 2: テストを実行して失敗することを確認する**
+- [x] **Step 2: テストを実行して失敗することを確認する**
 
 Run: `npm test -w @warikan/web`
 Expected: FAIL — `./ResultView.js` が解決できない
 
-- [ ] **Step 3: ResultView を実装する**
+- [x] **Step 3: ResultView を実装する**
 
 `apps/web/src/features/monthly/ResultView.tsx`:
 
@@ -2707,12 +2723,12 @@ export function ResultView({ snapshot, isDirty, isBusy, onRecalculate, onToggleT
 }
 ```
 
-- [ ] **Step 4: テストを実行して成功することを確認する**
+- [x] **Step 4: テストを実行して成功することを確認する**
 
 Run: `npm test -w @warikan/web`
-Expected: PASS（既存 36 + ResultView 9 = 45 tests）
+Expected: PASS（web 65 tests。上記7を参照）
 
-- [ ] **Step 5: 精算画面を組み立てる**
+- [x] **Step 5: 精算画面を組み立てる**
 
 `apps/web/src/routes/MonthlyResult.tsx` を次に置き換える:
 
@@ -2781,7 +2797,7 @@ export function MonthlyResult() {
 }
 ```
 
-- [ ] **Step 6: 型チェックとコミット**
+- [x] **Step 6: 型チェックとコミット**
 
 ```bash
 npm run typecheck -w @warikan/web
@@ -4061,7 +4077,7 @@ git commit -m "feat: 単発割り勘の結果画面とホームを追加"
 - [ ] **Step 1: 全テストと型チェックを通す**
 
 Run: `npm test`
-Expected: shared 31 + api 76 + web 81 = 188 tests すべて PASS
+Expected: shared 31 + api 76 + web 82 = 189 tests すべて PASS
 
 Run: `npm run typecheck`
 Expected: エラーなし
