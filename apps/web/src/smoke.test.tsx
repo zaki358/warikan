@@ -53,7 +53,9 @@ describe("ルーティング", () => {
   it("/monthly/2026-08/result で精算画面を表示する", () => {
     renderAt("/monthly/2026-08/result");
 
-    expect(screen.getByRole("heading", { name: "月次の精算" })).toBeInTheDocument();
+    // 精算画面は Task 8 で実装に置き換わり、仮の見出し「月次の精算」は無くなった。
+    // 記録画面と同じく、URL の :ym から作られる見出しを見てパラメータの解釈まで確かめる。
+    expect(screen.getByRole("heading", { name: "2026年8月の精算" })).toBeInTheDocument();
   });
 
   it("/events/new でウィザードを表示する", () => {

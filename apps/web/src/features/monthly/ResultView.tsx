@@ -1,0 +1,90 @@
+import { Button } from "../../components/Button.js";
+import { formatYen, percent } from "../../lib/format.js";
+import type { Snapshot } from "../../lib/types.js";
+
+type Props = {
+  snapshot: Snapshot;
+  isDirty: boolean;
+  isBusy: boolean;
+  onRecalculate: () => void;
+  onToggleTransfer: (index: number, isPaid: boolean) => void;
+};
+
+export function ResultView({ snapshot, isDirty, isBusy, onRecalculate, onToggleTransfer }: Props) {
+  const nameByUser = new Map(snapshot.byUser.map((entry) => [entry.userId, entry.displayName]));
+
+  return (
+    <>
+      {isDirty ? (
+        <div role="alert" className="banner banner-warn">
+          計算したあとに記録が変わっています。金額が古い可能性があります。
+          <div style={{ marginTop: 10 }}>
+            <Button size="sm" disabled={isBusy} onClick={onRecalculate}>
+              再計算する
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="card">
+        <div className="list-row">
+          <div className="grow">今月の合計</div>
+          <div className="amount">{formatYen(snapshot.total)}</div>
+        </div>
+        <div className="list-row">
+          <div className="grow">一人あたり</div>
+          <div className="amount">{formatYen(snapshot.perPerson)}</div>
+        </div>
+      </div>
+
+      <div className="card">
+        <h2>カテゴリ別内訳</h2>
+        {snapshot.byCategory.length === 0 ? (
+          <p className="sub">記録がありません。</p>
+        ) : (
+          snapshot.byCategory.map((entry) => (
+            <div className="list-row" key={String(entry.categoryId ?? "none")}>
+              <div className="grow ellipsis">{entry.name}</div>
+              <div className="amount">{formatYen(entry.amount)}</div>
+              <div className="muted">{percent(entry.amount, snapshot.total)}%</div>
+            </div>
+          ))
+        )}
+      </div>
+
+      <div className="card">
+        <h2>支払い状況</h2>
+        {snapshot.byUser.map((entry) => (
+          <div className="list-row" key={entry.userId}>
+            <div className="grow ellipsis">{entry.displayName}</div>
+            <div className="amount">{formatYen(entry.paid)}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="card">
+        <h2>精算</h2>
+        {snapshot.transfers.length === 0 ? (
+          <p className="sub">精算は不要です</p>
+        ) : (
+          snapshot.transfers.map((transfer, index) => (
+            <div className="list-row" key={`${transfer.fromId}-${transfer.toId}-${index}`}>
+              <div className="grow">
+                💸 {nameByUser.get(transfer.fromId) ?? "?"} → {nameByUser.get(transfer.toId) ?? "?"}
+              </div>
+              <div className="amount">{formatYen(transfer.amount)}</div>
+              <Button
+                variant={transfer.isPaid ? "success" : "secondary"}
+                size="sm"
+                disabled={isBusy}
+                onClick={() => onToggleTransfer(index, !transfer.isPaid)}
+              >
+                {transfer.isPaid ? "未払いに戻す" : "支払い済みにする"}
+              </Button>
+            </div>
+          ))
+        )}
+      </div>
+    </>
+  );
+}
