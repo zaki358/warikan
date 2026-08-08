@@ -1,15 +1,10 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { App } from "./App.js";
 
-// Testing Library の自動クリーンアップは、グローバルな `afterEach` が存在するときだけ
-// 登録される（`@testing-library/react` の index.js が `typeof afterEach === "function"`
-// で判定している）。vitest.config.ts は `globals: false` なのでこれが登録されず、
-// 描画した DOM が body に積み上がって getByRole が「複数見つかった」で落ちる。
-// 明示的に呼んでテストを1件ずつ独立させる。
-afterEach(cleanup);
+// 描画後のクリーンアップは src/test-setup.ts で一括登録している。
 
 const renderAt = (path: string) =>
   render(

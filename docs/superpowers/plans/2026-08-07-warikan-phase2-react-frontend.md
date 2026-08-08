@@ -1279,6 +1279,18 @@ git commit -m "feat: 金額と年月のフォーマッタを追加"
 
 ## Task 5: 共通コンポーネントとルーターの骨格
 
+**実施時に判明した計画の不備（実測で確認）:**
+
+1. **Step 6 のスモークテストはそのままでは通らない。** `vitest.config.ts` が `globals: false` のため、`@testing-library/react` の自動クリーンアップが登録されない（`typeof afterEach === "function"` で判定しているため）。描画した DOM が `body` に積み上がり、5件目が `Found multiple elements with the role "heading" and name "割り勘"` で落ちる。**Task 6 以降のコンポーネントテストはすべてこれを踏む**ので、各テストファイルではなく `apps/web/src/test-setup.ts` に `afterEach(cleanup)` を一度だけ登録して解決した。以降のタスクでは各テストファイルにクリーンアップを書く必要はない。
+
+2. **Step 7 の期待件数 42 は誤り。正しくは 41。** Step 6 は既存の `smoke.test.tsx`（1件）を**置き換える**のであって追加ではないため、`api 8 + format 10 + ym 18 + ルーティング 5 = 41` が正しい。テストが失われたわけではない。
+
+3. **`AmountInput` は自分でラベルを持たない。** `id` を受け取るだけなので、`getByLabelText` で引くには**呼び出し側が `<label htmlFor={id}>` を描く必要がある**。Task 6 以降でフォームを組むときは必ずラベルを対にすること。`type="number"` + `inputMode="numeric"` + `min=0` + `step=1` で、スマホで負号なしの数値キーパッドが出ることは確認済み。
+
+**確認して問題なかったもの:** react-router 8.3.0 は `BrowserRouter` / `Routes` / `Route` / `Navigate` / `MemoryRouter` / `useParams` / `useNavigate` をすべて `react-router` から export しており（実行と型定義の両方で確認）、計画の import はそのまま使える。TanStack Query 5.101.4 の `staleTime` / `refetchOnWindowFocus` / `retry` も有効。既存 `styles.css` と Step 2 の追加分はセレクタが重複していない。
+
+**ミューテーションで検証済み:** `<Route path="*">` の catch-all を消すと1件、`/monthly/:ym/result` のパスを `:ym/results` に変えると1件が落ちる。ルーティングのテストは実際に効いている。
+
 **Files:**
 - Create: `apps/web/src/components/Card.tsx`, `Button.tsx`, `AmountInput.tsx`, `Toggle.tsx`, `ErrorBanner.tsx`
 - Modify: `apps/web/src/App.tsx`, `apps/web/src/main.tsx`, `apps/web/src/styles.css`
@@ -1291,7 +1303,7 @@ git commit -m "feat: 金額と年月のフォーマッタを追加"
   - `<Card>`, `<Button variant>`, `<AmountInput>`, `<Toggle>`, `<ErrorBanner>`
   - ルート定義（`/`, `/monthly`, `/monthly/:ym`, `/monthly/:ym/result`, `/events/new`, `/events/new/input`, `/events/:id`）
 
-- [ ] **Step 1: 共通コンポーネントを書く**
+- [x] **Step 1: 共通コンポーネントを書く**
 
 `apps/web/src/components/Card.tsx`:
 
@@ -1421,7 +1433,7 @@ export function ErrorBanner({ error }: { error: unknown }) {
 }
 ```
 
-- [ ] **Step 2: 対応する CSS を追記する**
+- [x] **Step 2: 対応する CSS を追記する**
 
 `apps/web/src/styles.css` の末尾に追記:
 
@@ -1554,7 +1566,7 @@ export function ErrorBanner({ error }: { error: unknown }) {
 }
 ```
 
-- [ ] **Step 3: 仮の画面コンポーネントを6つ作る**
+- [x] **Step 3: 仮の画面コンポーネントを6つ作る**
 
 いずれも後続タスクで中身を入れる。ここでは見出しだけ置く。
 
@@ -1606,7 +1618,7 @@ export function EventDetail() {
 }
 ```
 
-- [ ] **Step 4: ルートを定義する**
+- [x] **Step 4: ルートを定義する**
 
 `apps/web/src/App.tsx` を次に置き換える:
 
@@ -1639,7 +1651,7 @@ export function App() {
 }
 ```
 
-- [ ] **Step 5: main.tsx に Provider を組む**
+- [x] **Step 5: main.tsx に Provider を組む**
 
 `apps/web/src/main.tsx` を次に置き換える:
 
@@ -1677,7 +1689,7 @@ createRoot(root).render(
 );
 ```
 
-- [ ] **Step 6: スモークテストをルーター対応に書き換える**
+- [x] **Step 6: スモークテストをルーター対応に書き換える**
 
 `apps/web/src/smoke.test.tsx` を次に置き換える:
 
@@ -1728,12 +1740,12 @@ describe("ルーティング", () => {
 });
 ```
 
-- [ ] **Step 7: テストを実行する**
+- [x] **Step 7: テストを実行する**
 
 Run: `npm test -w @warikan/web`
-Expected: PASS（smoke 1 + api 8 + format 10 + ym 18 + ルーティング 5 = 42 tests）
+Expected: PASS（api 8 + format 10 + ym 18 + ルーティング 5 = 41 tests。smoke 1 は置き換えられて消える）
 
-- [ ] **Step 8: 型チェックとコミット**
+- [x] **Step 8: 型チェックとコミット**
 
 ```bash
 npm run typecheck -w @warikan/web
@@ -4018,7 +4030,7 @@ git commit -m "feat: 単発割り勘の結果画面とホームを追加"
 - [ ] **Step 1: 全テストと型チェックを通す**
 
 Run: `npm test`
-Expected: shared 31 + api 76 + web 75 = 182 tests すべて PASS
+Expected: shared 31 + api 76 + web 74 = 181 tests すべて PASS
 
 Run: `npm run typecheck`
 Expected: エラーなし
