@@ -141,3 +141,36 @@ describe("ExpenseForm", () => {
     expect(screen.getByRole("button", { name: "記録中…" })).toBeDisabled();
   });
 });
+
+describe("カテゴリの既定値", () => {
+  const renderWith = (list: { id: number; name: string }[]) => (
+    <ExpenseForm
+      ym="2026-08"
+      users={users}
+      categories={list}
+      defaultPaidBy="u1"
+      onSubmit={vi.fn()}
+      isSubmitting={false}
+    />
+  );
+
+  // useCategories と useMe は別クエリなので、どちらが先に解決するかで
+  // カテゴリが空のままフォームが描画されることがある。既定値を初回描画時に
+  // 固定すると「未分類」のまま動かなくなり、既定カテゴリが実質的に非決定になる。
+  it("カテゴリが後から届いても先頭が既定になる", () => {
+    const { rerender } = render(renderWith([]));
+    rerender(renderWith(categories));
+
+    expect((screen.getByLabelText("カテゴリ") as HTMLSelectElement).value).toBe("1");
+  });
+
+  it("利用者が選んだ後はカテゴリの再取得で上書きされない", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(renderWith(categories));
+
+    await user.selectOptions(screen.getByLabelText("カテゴリ"), "");
+    rerender(renderWith(categories));
+
+    expect((screen.getByLabelText("カテゴリ") as HTMLSelectElement).value).toBe("");
+  });
+});

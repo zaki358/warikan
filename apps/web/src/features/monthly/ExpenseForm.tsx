@@ -25,8 +25,14 @@ export function ExpenseForm({
 }: Props) {
   // 連続入力のため、支払者・カテゴリ・日付は送信後も保持する（設計書 §7.1）。
   const [paidBy, setPaidBy] = useState(defaultPaidBy);
-  const [categoryId, setCategoryId] = useState<number | null>(categories[0]?.id ?? null);
   const [spentOn, setSpentOn] = useState(() => clampToMonth(todayIso(), ym));
+
+  // カテゴリは useMe とは別クエリなので、フォームが描画された時点ではまだ空のことがある。
+  // 既定値を初回描画時に固定すると「未分類」のまま動かなくなり、どちらのクエリが先に
+  // 解決したかで既定カテゴリが変わってしまう。未選択は undefined で持ち、
+  // 表示する値はそのつど先頭カテゴリから導く。選択後は state が優先される。
+  const [chosenCategoryId, setChosenCategoryId] = useState<number | null | undefined>(undefined);
+  const categoryId = chosenCategoryId === undefined ? (categories[0]?.id ?? null) : chosenCategoryId;
 
   // 毎回変わるものだけクリアする。
   const [amount, setAmount] = useState<number | "">("");
@@ -110,7 +116,7 @@ export function ExpenseForm({
           id="category"
           value={categoryId ?? ""}
           onChange={(event) =>
-            setCategoryId(event.target.value === "" ? null : Number(event.target.value))
+            setChosenCategoryId(event.target.value === "" ? null : Number(event.target.value))
           }
         >
           <option value="">未分類</option>

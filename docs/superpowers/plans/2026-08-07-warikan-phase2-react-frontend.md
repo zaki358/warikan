@@ -1929,6 +1929,23 @@ git commit -m "feat: 月次のデータ取得フックを追加"
 
 このタスクの中心は**フォームの保持挙動**。設計書 §7.1 の「送信後、金額と品目名だけクリアし、支払者・カテゴリ・日付は直前の値を保持する」を満たす。レシートを見ながら連続入力するときに、毎回3項目を選び直すのは実用に耐えないため。
 
+**実施時に判明した不具合と、検証で分かったこと:**
+
+1. **カテゴリの既定値が非決定だった（修正済み）。** `useState(categories[0]?.id ?? null)` は初回描画時にしか評価されない。`useCategories` は `useMe` とは別クエリなので、`me` が先に解決するとカテゴリが空のままフォームが描画され、**既定が「未分類」に固定されて二度と動かない**。実測で確認（空で描画 → カテゴリ到着後も `value=""` / 表示「未分類」のまま）。どちらのクエリが先に解決するかで既定カテゴリが変わる、再現しにくい不具合。未選択を `undefined` で持ち、表示値は毎回 `categories[0]` から導く形に直した（利用者が選んだ後は state が優先される）。回帰テストを2件追加。
+
+2. **設計書 §7.1「送信後に支払者・カテゴリ・日付が残る」はテストで本当に守られている（両方向のミューテーションで確認）。**
+   - 送信後に支払者・カテゴリ・日付もリセットする版 → 1件 FAIL
+   - 金額と品目もリセットしない版 → 1件 FAIL
+   上記1の修正後も同じミューテーションが落ちることを再確認済み。
+
+3. **`<input type="date">` は `userEvent.type` で入力できない**（テストのコメントに実測が残っている）。1文字ずつ打つと jsdom が中間状態を不正な日付として弾き、React が state から書き戻して空のままになる。`fireEvent.change` で「妥当な値1回分の change」を送ること。実ブラウザのピッカー操作もそう届く。
+
+4. **支払者トグルの制約は画面を壊さない。** 相手がまだ記録していない月では候補が「自分」1件だけになるが、`defaultPaidBy` は常に自分の userId なので不正な値は送られない。表示名が「パートナー」固定になる点は `## 既知の制約` のとおりで、Plan 3 の `GET /api/users` で解消する。
+
+5. **`ErrorBanner` は `ApiError.fields` を表示しない。** どの項目が悪いかは画面に出ず、サーバーのメッセージ本文だけが出る。計画がそこまで作っていないため今回は作っていない。実害は小さいが、入力項目が増えたら再検討の余地がある。
+
+6. **Step 5 / Step 8 の期待件数（既存 29 + ExpenseForm 7 = 36）は古い。** Task 4〜6 でテストを増やしたため、実際は web 55 件になる。
+
 **Files:**
 - Create: `apps/web/src/features/monthly/ExpenseForm.tsx`
 - Create: `apps/web/src/features/monthly/ExpenseList.tsx`
@@ -1941,7 +1958,7 @@ git commit -m "feat: 月次のデータ取得フックを追加"
   - `<ExpenseForm ym users categories defaultPaidBy onSubmit isSubmitting />`
   - `<ExpenseList expenses users categories onDelete deletingId />`
 
-- [ ] **Step 1: 失敗するテストを書く**
+- [x] **Step 1: 失敗するテストを書く**
 
 `apps/web/src/features/monthly/ExpenseForm.test.tsx`:
 
@@ -2081,12 +2098,12 @@ describe("ExpenseForm", () => {
 });
 ```
 
-- [ ] **Step 2: テストを実行して失敗することを確認する**
+- [x] **Step 2: テストを実行して失敗することを確認する**
 
 Run: `npm test -w @warikan/web`
 Expected: FAIL — `./ExpenseForm.js` が解決できない
 
-- [ ] **Step 3: ExpenseForm を実装する**
+- [x] **Step 3: ExpenseForm を実装する**
 
 `apps/web/src/features/monthly/ExpenseForm.tsx`:
 
@@ -2227,7 +2244,7 @@ export function ExpenseForm({
 
 `日付` のラベルは `spent-on` を指すため、テストの `getByLabelText("日付")` は `<input type="date">` を掴む。
 
-- [ ] **Step 4: `.form-label` の CSS を追記する**
+- [x] **Step 4: `.form-label` の CSS を追記する**
 
 `apps/web/src/styles.css` の末尾に追記:
 
@@ -2241,12 +2258,12 @@ export function ExpenseForm({
 }
 ```
 
-- [ ] **Step 5: テストを実行して成功することを確認する**
+- [x] **Step 5: テストを実行して成功することを確認する**
 
 Run: `npm test -w @warikan/web`
-Expected: PASS（既存 29 + ExpenseForm 7 = 36 tests）
+Expected: PASS（web 55 tests。上記6を参照）
 
-- [ ] **Step 6: ExpenseList を書く**
+- [x] **Step 6: ExpenseList を書く**
 
 `apps/web/src/features/monthly/ExpenseList.tsx`:
 
@@ -2326,7 +2343,7 @@ export function ExpenseList({ expenses, users, categories, onDelete, deletingId 
 }
 ```
 
-- [ ] **Step 7: 記録画面を組み立てる**
+- [x] **Step 7: 記録画面を組み立てる**
 
 `apps/web/src/routes/MonthlyRecord.tsx` を次に置き換える:
 
@@ -2442,15 +2459,15 @@ export function MonthlyRecord() {
 
 **既知の制約（Task 12 で README に明記する）**: 支払者トグルに出せるのは、ログイン中の自分と「その月の支出に現れたもう一人」だけ。相手がまだ1件も記録していない月では相手を選べず、相手の表示名も「パートナー」の固定文言になる。原因は API に「登録済みユーザー一覧」が無いこと（Plan 1 の `listUsers` はどのルートからも使われていない）。**Plan 3 で `GET /api/users` を追加して解消する。**
 
-- [ ] **Step 8: テストと型チェックを通す**
+- [x] **Step 8: テストと型チェックを通す**
 
 Run: `npm test -w @warikan/web`
-Expected: PASS（36 tests）
+Expected: PASS（web 55 tests）
 
 Run: `npm run typecheck -w @warikan/web`
 Expected: エラーなし
 
-- [ ] **Step 9: コミット**
+- [x] **Step 9: コミット**
 
 ```bash
 git add apps/web
@@ -4044,7 +4061,7 @@ git commit -m "feat: 単発割り勘の結果画面とホームを追加"
 - [ ] **Step 1: 全テストと型チェックを通す**
 
 Run: `npm test`
-Expected: shared 31 + api 76 + web 79 = 186 tests すべて PASS
+Expected: shared 31 + api 76 + web 81 = 188 tests すべて PASS
 
 Run: `npm run typecheck`
 Expected: エラーなし
