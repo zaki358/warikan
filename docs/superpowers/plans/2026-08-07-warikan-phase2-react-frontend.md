@@ -727,7 +727,7 @@ powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { \
     npm run dev -w @warikan/api
 ```
 
-- [ ] **Step 9: コミット**
+- [x] **Step 9: コミット**
 
 ```bash
 git add apps README.md
