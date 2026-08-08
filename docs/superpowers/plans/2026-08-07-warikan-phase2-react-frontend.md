@@ -196,6 +196,7 @@ apps/web/
 | `features/events/wizardReducer.ts` | 純関数。状態遷移の分岐が多い |
 | `ExpenseForm` | 「送信後に支払者・カテゴリ・日付が残る」という設計書 §7.1 の要求。目視では気づきにくい |
 | `ResultView` | `is_dirty` の警告出し分け。出すべきときに出ないと金額を誤る |
+| `features/monthly/queries.ts` の invalidate | 対象を取り違えると金額が古いまま表示される。前方一致が非対称で間違えやすい（Task 6 で追加） |
 
 書かない対象: 単純な表示だけのコンポーネント、ルーティングの結線、CSS。これらは Plan 3 の Playwright E2E と `ui-inspector` に任せる。
 
@@ -1760,9 +1761,22 @@ git commit -m "feat: 共通コンポーネントとルーターの骨格を追�
 
 ## Task 6: 月次のデータ取得フック
 
+**実施時の判断と実測（計画のコード自体は修正不要だった）:**
+
+1. **計画は Task 6 にテストを置いていなかったが、5件追加した。** 計画は「TanStack Query への委譲だけで独自ロジックが無い」としていたが、invalidate 対象の選択は独自の判断であり、`queryKeys.ts` のコメント自身が「取り違えると金額が古いまま表示される」と書いている。`## テストの方針` の「壊れたときに気づきにくく、E2E では検知が遅れるもの」に該当するため `apps/web/src/features/monthly/queries.test.tsx` を追加した。
+
+2. **クエリキーの前方一致（実測）**: `invalidateQueries({ queryKey: ["monthly", ym] })` は `["monthly", ym, "result"]` **も巻き込む**（既定は `exact: false` の前方一致）。逆に `["monthly", ym, "result"]` の invalidate は `["monthly", ym]` を**巻き込まない**。この非対称性が要点で、**精算結果だけを invalidate すると期間の `status` / `isDirty` が古いまま残る**。だから `useSettle` は `useExpenseMutation` を使う必要がある。`useExpenseMutation` の2本目 `invalidateQueries(monthlyResult)` は形式上は冗長だが、意図を明示するため残した。
+
+3. **ミューテーションで検証済み**: `useSettle` を「精算結果だけ invalidate」に落とすと1件、`useExpenseMutation` から `monthly` の invalidate を削ると2件、`useToggleTransfer` の対象を `monthly` に変えると1件が落ちる。
+
+4. **API パス9本はすべて実装と一致していた**（`apps/api/src/routes/monthly.ts` の該当行と `apps/api/test/` の実際の呼び出しの両方で照合）。Task 3〜5 のような不備はなかった。
+
+5. **`useUpdateExpense` は全フィールド上書き。** サーバー側は `Partial` マージだが、フックの型 `ExpenseInput & { id: string }` は全5フィールド必須。Task 7 で部分更新の UI を作るならこの点に注意。
+
 **Files:**
 - Create: `apps/web/src/features/monthly/queries.ts`
 - Create: `apps/web/src/lib/queryKeys.ts`
+- Create: `apps/web/src/features/monthly/queries.test.tsx`（計画外。上記1を参照）
 
 **Interfaces:**
 - Consumes: `apiGet` / `apiSend`（Task 3）、`lib/types.ts` の型
@@ -1773,7 +1787,7 @@ git commit -m "feat: 共通コンポーネントとルーターの骨格を追�
   - `useAddExpense(ym)` / `useUpdateExpense(ym)` / `useDeleteExpense(ym)`
   - `useSettle(ym)` / `useToggleTransfer(ym)`
 
-- [ ] **Step 1: クエリキーを1か所に集める**
+- [x] **Step 1: クエリキーを1か所に集める**
 
 `apps/web/src/lib/queryKeys.ts`:
 
@@ -1792,7 +1806,7 @@ export const queryKeys = {
 };
 ```
 
-- [ ] **Step 2: 月次のフックを書く**
+- [x] **Step 2: 月次のフックを書く**
 
 `apps/web/src/features/monthly/queries.ts`:
 
@@ -1895,14 +1909,14 @@ export const useToggleTransfer = (ym: string) => {
 };
 ```
 
-- [ ] **Step 3: 型チェックを通す**
+- [x] **Step 3: 型チェックを通す**
 
 Run: `npm run typecheck -w @warikan/web`
 Expected: エラーなし
 
 このタスクにテストは書かない。中身は TanStack Query への委譲だけで、独自ロジックが無い。実際の結線は Task 7・8 の画面テストと Plan 3 の E2E で確かめる。
 
-- [ ] **Step 4: コミット**
+- [x] **Step 4: コミット**
 
 ```bash
 git add apps/web
@@ -4030,7 +4044,7 @@ git commit -m "feat: 単発割り勘の結果画面とホームを追加"
 - [ ] **Step 1: 全テストと型チェックを通す**
 
 Run: `npm test`
-Expected: shared 31 + api 76 + web 74 = 181 tests すべて PASS
+Expected: shared 31 + api 76 + web 79 = 186 tests すべて PASS
 
 Run: `npm run typecheck`
 Expected: エラーなし
