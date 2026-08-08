@@ -34,6 +34,25 @@ npm run migrate:local -w @warikan/api
 npm run dev -w @warikan/api
 ```
 
+フロントエンドを開発する（http://localhost:5173、`/api` はローカルの Worker に転送される）:
+
+```bash
+npm run dev -w @warikan/web
+```
+
+このとき、別のターミナルで API も起動しておく:
+
+```bash
+npm run dev -w @warikan/api
+```
+
+本番と同じ構成（単一 Worker が画面と API の両方を返す）で確認する:
+
+```bash
+npm run build -w @warikan/web
+npm run dev -w @warikan/api
+```
+
 全テストと型チェック:
 
 ```bash

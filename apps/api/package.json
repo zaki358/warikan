@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
+    "build": "npm run build -w @warikan/web",
     "deploy": "wrangler deploy",
     "test": "vitest run",
     "test:watch": "vitest",
