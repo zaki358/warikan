@@ -51,6 +51,8 @@ npm run dev -w @warikan/api
 
 カバレッジは v8 プロバイダが workerd 上で動かない（`node:inspector/promises` を解決できない）。計測するときは `@vitest/coverage-istanbul` を入れて `--coverage.provider=istanbul` を使う。
 
+**`vitest` では静的配信を検証できない**: `@cloudflare/vitest-pool-workers` は `wrangler.jsonc` の `assets` を読み込むが Asset Worker を再現しない。テスト内では `/` も `/monthly/2026-08` も Hono の 404 になる。`run_worker_first` を壊しても全テストが通ってしまうため、`assets` の振り分けを変えたときは `wrangler dev` を起動して手で確認すること（`run_worker_first: ["/api/*"]` を外すと `/api/health` が SPA の HTML を返し API が全滅する）。
+
 ## 移行の要点
 
 **認証**: Cloudflare Access で `warikan.y-kakeibo.workers.dev` を保護し、許可メール2件のみ通す。Worker 側は `Cf-Access-Jwt-Assertion` の JWT を JWKS で検証してからメールを取り出す。`Cf-Access-Authenticated-User-Email` ヘッダは Access を経由しないリクエストで詐称できるため信用しない。

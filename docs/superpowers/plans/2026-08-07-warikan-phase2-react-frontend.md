@@ -573,51 +573,45 @@ git commit -m "feat: apps/web に React + Vite の土台を用意"
 **Files:**
 - Modify: `apps/api/wrangler.jsonc`
 - Modify: `apps/api/package.json`（build スクリプト）
-- Create: `apps/api/test/assets.test.ts`
+- ~~Create: `apps/api/test/assets.test.ts`~~（撤回。理由は Step 1）
 - Modify: `README.md`
 
 **Interfaces:**
 - Consumes: `apps/web/dist`（Task 1）
 - Produces: `/api/*` は Worker、それ以外は SPA という配信規則
 
-- [ ] **Step 1: 失敗するテストを書く**
+- [x] **Step 1: 自動テストでは守れないことを確認する（当初の計画を撤回）**
 
-`apps/api/test/assets.test.ts`:
+**当初この Step は `apps/api/test/assets.test.ts` を新規作成する内容だったが、実施時の検証で「そのテストは目的をまったく果たせない」ことが判明したため撤回した。**
 
-```ts
-import { exports } from "cloudflare:workers";
-import { describe, expect, it } from "vitest";
+判明したこと（実測）:
 
-import { authedFetch } from "./helpers.js";
+`@cloudflare/vitest-pool-workers` のテスト環境は **Static Assets を一切再現しない**。`wrangler.jsonc` の `assets` は `configPath` 経由で読み込まれるものの、Asset Worker はテストランナー内に存在しない。実際に確認すると:
 
-// assets を設定すると、静的ファイルに当たらないリクエストが SPA の index.html に
-// 吸われるようになる。/api/* がそれに巻き込まれると API が全滅するため、
-// 「API は Worker に届く」「それ以外は SPA に落ちる」の両方を固定する。
-describe("静的配信と API の振り分け", () => {
-  it("/api/health は Worker が処理する", async () => {
-    const res = await exports.default.fetch(new Request("https://warikan.test/api/health"));
+| リクエスト | テスト環境での応答 | 実際の `wrangler dev` での応答 |
+|---|---|---|
+| `GET /` | `404 application/json`（Hono の notFound） | `200 text/html`（SPA） |
+| `GET /monthly/2026-08` | `404 application/json` | `200 text/html`（SPA フォールバック） |
 
-    expect(res.status).toBe(200);
-    await expect(res.json()).resolves.toEqual({ ok: true, data: { status: "ok" } });
-  });
+つまりテスト環境では常に Worker だけが動くので、`run_worker_first` が正しかろうが壊れていようが結果は変わらない。ミューテーションで裏付けた:
 
-  it("未定義の /api/* は SPA に吸われず、JSON のエンベロープを返す", async () => {
-    const res = await authedFetch("/api/nope");
+`run_worker_first` を `["/api/*"]` → `["/never-matches"]` に書き換えても **78 tests すべて PASS のまま**。守れていない。
 
-    expect(res.status).toBe(404);
-    expect(res.headers.get("content-type")).toContain("application/json");
-  });
-});
-```
+加えて、書こうとしていた2件は既存の `apps/api/test/health.test.ts` の
 
-- [ ] **Step 2: テストを実行して現状を確認する**
+- `it("GET /api/health が 200 を返す")`
+- `it("認証済みでも未定義のパスは 404 エンベロープを返す")`
+
+とほぼ同一で、`content-type` の assertion が1行増えるだけだった。**通らない保証を装う重複テストは、無いより悪い。** したがってファイルは作らない。
+
+この構成を守るのは Step 7 のローカル配信確認である。自動テストで代替できないことを承知のうえで、Step 7 を必須の検証ゲートとして扱うこと。
+
+- [x] **Step 2: 既存テストが壊れていないことを確認する**
 
 Run: `npm test -w @warikan/api`
-Expected: PASS（assets 未設定なので、この時点では素通りする。Step 4 の設定後も通り続けることが本題）
+Expected: PASS（Plan 1 の 76 tests のまま。Task 2 でテストは増えない）
 
-この2件は「設定を入れても壊れない」ことを守るための回帰テストなので、RED から始まらない。Step 4 の後に落ちたら設定が誤っている。
-
-- [ ] **Step 3: web をビルドする**
+- [x] **Step 3: web をビルドする**
 
 ```bash
 npm run build -w @warikan/web
@@ -625,7 +619,7 @@ npm run build -w @warikan/web
 
 `apps/api` のテストは `apps/web/dist` の存在を前提にしないが、`wrangler dev` と `wrangler deploy` は必要とする。
 
-- [ ] **Step 4: wrangler.jsonc に assets を追加する**
+- [x] **Step 4: wrangler.jsonc に assets を追加する**
 
 `apps/api/wrangler.jsonc` の `"observability"` の次に追加する:
 
@@ -641,14 +635,14 @@ npm run build -w @warikan/web
 
 `binding` は設定しない。Worker のコードから `env.ASSETS` を触る必要はなく、振り分けはプラットフォーム側で完結する。
 
-- [ ] **Step 5: テストを実行して壊れていないことを確認する**
+- [x] **Step 5: テストを実行して壊れていないことを確認する**
 
 Run: `npm test -w @warikan/api`
-Expected: PASS（Plan 1 の 76 tests + assets 2 tests = 78 tests）
+Expected: PASS（Plan 1 の 76 tests のまま）
 
-落ちた場合は `run_worker_first` の綴りとパターンを疑う。`/api/*` の `*` を落とすと `/api/health` しか一致しない。
+ここで確認できるのは「`assets` を足しても既存の Worker のテストが壊れていない」ことだけで、振り分けが正しいかどうかは**テストからは判定できない**（Step 1 参照）。振り分けの正否は Step 7 で見る。
 
-- [ ] **Step 6: api の build スクリプトを追加する**
+- [x] **Step 6: api の build スクリプトを追加する**
 
 `apps/api/package.json` の `scripts` に追加:
 
@@ -658,42 +652,63 @@ Expected: PASS（Plan 1 の 76 tests + assets 2 tests = 78 tests）
 
 `wrangler deploy` の前に web をビルドし忘れると古い画面が出るため、api 側から呼べるようにしておく。
 
-- [ ] **Step 7: ローカルで実際に配信を確認する**
+- [x] **Step 7: ローカルで実際に配信を確認する（このタスク唯一の実効的な検証）**
+
+Step 1 のとおり、`assets` の振り分けを検証できるのはここだけである。省略しないこと。
 
 ```bash
 npm run build -w @warikan/web
 ```
 
+**ポートに注意**: このマシンでは別プロジェクト（`kakei-dashboard-3`）の `wrangler dev` が 8787 に常駐している。衝突を避けて別ポートで起動する:
+
 ```bash
-npm run dev -w @warikan/api
+npx wrangler dev --port 8788
 ```
+
+（`apps/api` を cwd にして実行する。`assets.directory` が `../web/dist` という相対パスのため。8787 が空いていれば `npm run dev -w @warikan/api` でよい。）
 
 別のターミナルで:
 
 ```bash
-curl -s http://localhost:8787/api/health
+curl -s -w "\n[%{http_code} %{content_type}]\n" http://127.0.0.1:8788/api/health
 ```
 
 ```bash
-curl -s -o /dev/null -w "%{http_code} %{content_type}\n" http://localhost:8787/
+curl -s -o /dev/null -w "%{http_code} %{content_type}\n" http://127.0.0.1:8788/
 ```
 
 ```bash
-curl -s -o /dev/null -w "%{http_code} %{content_type}\n" http://localhost:8787/monthly/2026-08
+curl -s -o /dev/null -w "%{http_code} %{content_type}\n" http://127.0.0.1:8788/monthly/2026-08
 ```
 
-Expected:
-- `/api/health` → `{"ok":true,"data":{"status":"ok"}}`
-- `/` → `200 text/html`（SPA の index.html）
-- `/monthly/2026-08` → `200 text/html`（SPA フォールバック。404 ではない）
+```bash
+curl -s -w "\n[%{http_code} %{content_type}]\n" http://127.0.0.1:8788/api/nope
+```
 
-**停止手順に注意**（Plan 1 Task 14 で実測済み）: Ctrl+C だけでは子の `workerd` が残り、親が生きていると再生成される。`wrangler.js` → `wrangler-dist/cli.js` → `workerd` のツリーを親から順に落とす。`workerd` を名前だけで一括終了しないこと。このマシンでは別プロジェクト（`kakei-dashboard-3`）の `wrangler dev` も同じポート 8787 で常駐している。
+Expected（すべて実測で確認済み）:
+
+| リクエスト | 期待 | 意味 |
+|---|---|---|
+| `/api/health` | `{"ok":true,"data":{"status":"ok"}}` / `200 application/json` | API が Worker に届いている |
+| `/` | `200 text/html` | SPA の index.html |
+| `/monthly/2026-08` | `200 text/html` | SPA フォールバック（404 ではない） |
+| `/api/nope` | `{"ok":false,"error":{"code":"NOT_FOUND",...}}` / `404 application/json` | 未定義の API が SPA に吸われていない |
+| `/assets/index-*.js` | `200 text/javascript` | ビルド成果物が配信されている |
+
+**この設定が効いていることのミューテーション検証（実施済み）**: `run_worker_first` を `["/api/*"]` → `["/never-matches"]` に変えると、`/api/health` が **`200 text/html` で SPA の index.html を返す**（API が全滅する）。一方 `npm test -w @warikan/api` は 78 tests すべて PASS のまま素通りした。設定を触ったら必ずここを手で確認すること。
+
+**停止手順に注意**（Plan 1 Task 14 で実測済み）: Ctrl+C だけでは子の `workerd` が残り、親が生きていると再生成される。`wrangler.js` → `wrangler-dist/cli.js` → `workerd` のツリーを親から順に落とす。`workerd` を名前だけで一括終了しないこと。`kakei-dashboard-3` の `workerd` を巻き添えにする。
+
+コマンドラインで warikan のプロセスだけを特定してから落とす:
 
 ```bash
 powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { \$_.CommandLine -like '*warikan*' -and \$_.Name -in @('node.exe','workerd.exe') } | Select-Object ProcessId,ParentProcessId,Name,CreationDate"
 ```
 
-- [ ] **Step 8: README を更新する**
+実測時のツリーは `node`(親) → `node` → `workerd` ×2 の4プロセスで、親から順に `Stop-Process -Force` して停止した。停止後に上のコマンドを再実行し、残っているのが `kakei` のプロセスだけであることを確認すること。
+
+- [x] **Step 8: README を更新する**
 
 `README.md` の「開発」節に追記する:
 
@@ -3985,7 +4000,7 @@ git commit -m "feat: 単発割り勘の結果画面とホームを追加"
 - [ ] **Step 1: 全テストと型チェックを通す**
 
 Run: `npm test`
-Expected: shared 31 + api 78 + web 63 = 172 tests すべて PASS
+Expected: shared 31 + api 76 + web 63 = 170 tests すべて PASS
 
 Run: `npm run typecheck`
 Expected: エラーなし
