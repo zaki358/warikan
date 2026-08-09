@@ -14,6 +14,12 @@ type ParityCase = {
 
 const cases = parityCases as ParityCase[];
 
+/**
+ * このフィクスチャは移行前の Flask 実装（旧 legacy/parity_dump.py）が出力したもの。
+ * Flask 実装は Plan 3 で削除したため、**再生成はできない**。
+ * 作り直すには git 履歴から legacy/ を取り出す必要がある。
+ * 値を手で書き換えると、同値性の証拠でなくなる。
+ */
 describe("Flask 実装とのパリティ", () => {
   it("フィクスチャが空でない", () => {
     expect(cases.length).toBeGreaterThan(0);

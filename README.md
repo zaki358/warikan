@@ -9,7 +9,6 @@
 | `packages/shared` | 精算ロジック（純関数）と共通の型 |
 | `apps/api` | Hono の API（Cloudflare Workers） |
 | `apps/web` | React + Vite のフロントエンド |
-| `legacy` | 移行前の Flask 実装。パリティ確認用 |
 | `docs/superpowers/specs` | 設計書 |
 | `docs/superpowers/plans` | 実装計画 |
 

@@ -6,9 +6,7 @@
 
 割り勘 (warikan) — 夫婦2人で使う割り勘アプリ。
 
-> **注意:** このリポジトリは Cloudflare Workers + D1 + React への移行作業中です。
-> `legacy/` 配下は移行前の Flask 実装で、パリティ確認のために残しています。
-> 新規の作業は `apps/` と `packages/` で行ってください。
+> **設計と実装計画:**
 >
 > - 設計書: [docs/superpowers/specs/2026-08-05-warikan-cloudflare-design.md](docs/superpowers/specs/2026-08-05-warikan-cloudflare-design.md)
 > - 実装計画: [docs/superpowers/plans/](docs/superpowers/plans/)
@@ -20,7 +18,6 @@
 | `packages/shared` | 精算ロジック（純関数）と共通の型。DB にも HTTP にも依存しない |
 | `apps/api` | Hono の API（Cloudflare Workers + D1） |
 | `apps/web` | React + Vite のフロントエンド |
-| `legacy` | 移行前の Flask 実装。パリティ確認用で、移行完了後に削除する |
 | `docs/superpowers/specs` | 設計書 |
 | `docs/superpowers/plans` | 実装計画 |
 | `.claude/agents` | プロジェクト固有のサブエージェント |
@@ -60,6 +57,12 @@ npm run build -w @warikan/web
 `.dev.vars` の `DEV_BYPASS_EMAIL` は Access の JWT 検証を飛ばすだけで、`ACCESS_ALLOWED_EMAILS` の許可リストは常に効く。
 
 **`wrangler dev` の停止に注意**: Ctrl+C やプロセス終了だけでは子の `workerd` が残り、親が生きていると再生成される。停止するときは `wrangler.js` → `wrangler-dist/cli.js` → `workerd` のツリーを親から順に落とす。このマシンでは別プロジェクト（`kakei-dashboard-3`）の `wrangler dev` も同じポート 8787 で常駐しているため、PID をコマンドラインとパスで確認してから落とすこと。`workerd` を名前だけで一括終了しない。
+
+E2E（Playwright）は**起動済みの `wrangler dev` に対して**実行する。`playwright.config.ts` の `webServer` で起動させていないのは、Windows では wrangler を落としても子の `workerd` が残り、Playwright がツリーを親から落とす保証が無いため。ポートは 8788 を使う（8787 は別プロジェクトが常駐）。先に web をビルドし、別ターミナルで `npm run dev -w @warikan/api -- --port 8788` を起動しておくこと。
+
+```bash
+npm run test:e2e
+```
 
 カバレッジは v8 プロバイダが workerd 上で動かない（`node:inspector/promises` を解決できない）。計測するときは `@vitest/coverage-istanbul` を入れて `--coverage.provider=istanbul` を使う。
 
@@ -105,17 +108,3 @@ npm run build -w @warikan/web
 |---|---|
 | `ui-inspector` | スマホ／タブレット／PC 幅でレイアウトを検査し報告する。**コードは修正しない** |
 | `web-debugger` | ブラウザで再現する不具合を追跡し、原因を特定して修正する |
-
-## legacy/ の Flask 実装について
-
-移行前の実装。`legacy/app.py` の `calculate_settlements()` は、TS 実装との同値性検証（パリティテスト）の参照元として使う。
-
-起動するには:
-
-```bash
-python legacy/app.py
-```
-
-`http://127.0.0.1:5000` で `debug=True` の開発サーバーが立つ。debug モードはリローダーが親子2プロセスで動くため、停止時は両方落とすこと。Flask がインストールされている必要がある（`requirements.txt` は無い）。
-
-現行 Flask 実装の詳細な解析は [docs/app-analysis.md](docs/app-analysis.md) にある。移行で修正する既知の問題（メンバーを名前で識別、端数の丸め誤差、履歴5件上限、ウィザード状態の Cookie 依存）もそこに記載されている。
