@@ -143,6 +143,7 @@ describe("不変性", () => {
     { type: "setItemName", index: 0, name: "交通費" },
     { type: "setItemAmount", index: 0, amount: 800 },
     { type: "setItemPaidBy", index: 1, paidByIndex: 1 },
+    { type: "reset" },
   ];
 
   /** 凍結すると push / splice / 要素への代入が TypeError で落ちる（ESM は strict mode）。 */
@@ -339,5 +340,17 @@ describe("toCreatePayload", () => {
     );
 
     expect(toCreatePayload(state).members[1]?.paid).toBe(0);
+  });
+});
+
+describe("reset", () => {
+  it("初期状態に戻す", () => {
+    const dirty = reduce(
+      initialWizardState(),
+      { type: "setTitle", title: "飲み会" },
+      { type: "addMember" },
+    );
+
+    expect(wizardReducer(dirty, { type: "reset" })).toEqual(initialWizardState());
   });
 });

@@ -24,7 +24,8 @@ export type WizardAction =
   | { type: "removeItem"; index: number }
   | { type: "setItemName"; index: number; name: string }
   | { type: "setItemAmount"; index: number; amount: number | "" }
-  | { type: "setItemPaidBy"; index: number; paidByIndex: number };
+  | { type: "setItemPaidBy"; index: number; paidByIndex: number }
+  | { type: "reset" };
 
 const emptyMember = (): MemberDraft => ({ name: "", paid: "" });
 
@@ -41,6 +42,10 @@ const replaceAt = <T>(list: T[], index: number, next: T): T[] =>
 
 export function wizardReducer(state: WizardState, action: WizardAction): WizardState {
   switch (action.type) {
+    // 作成に成功したあと、次に /events/new を開いたときへ前回の入力を持ち越さない。
+    case "reset":
+      return initialWizardState();
+
     case "setTitle":
       return { ...state, title: action.title };
 

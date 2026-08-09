@@ -268,3 +268,23 @@ button:focus-visible {
   margin-bottom: 5px;
   font-weight: 500;
 }
+
+.item-row {
+  padding: 14px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.item-row:last-of-type {
+  border-bottom: none;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
