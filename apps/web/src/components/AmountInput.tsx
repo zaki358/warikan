@@ -1,3 +1,5 @@
+import { MAX_AMOUNT } from "../lib/limits.js";
+
 type Props = {
   id: string;
   value: number | "";
@@ -17,6 +19,7 @@ export function AmountInput({ id, value, onChange, placeholder, disabled }: Prop
       type="number"
       inputMode="numeric"
       min={0}
+      max={MAX_AMOUNT}
       step={1}
       value={value}
       placeholder={placeholder}
@@ -29,7 +32,7 @@ export function AmountInput({ id, value, onChange, placeholder, disabled }: Prop
         }
 
         const parsed = Number(raw);
-        if (!Number.isInteger(parsed) || parsed < 0) return;
+        if (!Number.isInteger(parsed) || parsed < 0 || parsed > MAX_AMOUNT) return;
         onChange(parsed);
       }}
     />

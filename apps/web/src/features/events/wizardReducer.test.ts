@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { MAX_ITEMS } from "../../lib/limits.js";
 import {
   initialWizardState,
   toCreatePayload,
@@ -191,6 +192,15 @@ describe("品目の編集", () => {
     );
 
     expect(state.items[0]?.amount).toBe(20000);
+  });
+
+  it("品目は上限を超えて増えない", () => {
+    let state = initialWizardState();
+    for (let i = 0; i < MAX_ITEMS + 5; i += 1) {
+      state = wizardReducer(state, { type: "addItem" });
+    }
+
+    expect(state.items).toHaveLength(MAX_ITEMS);
   });
 });
 

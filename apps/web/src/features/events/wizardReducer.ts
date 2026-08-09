@@ -1,3 +1,4 @@
+import { MAX_ITEMS } from "../../lib/limits.js";
 import type { CreateEventPayload, EventMode } from "../../lib/types.js";
 
 const MAX_MEMBERS = 20;
@@ -85,7 +86,9 @@ export function wizardReducer(state: WizardState, action: WizardAction): WizardS
     }
 
     case "addItem":
-      return { ...state, items: [...state.items, { name: "", amount: "", paidByIndex: 0 }] };
+      return state.items.length >= MAX_ITEMS
+        ? state
+        : { ...state, items: [...state.items, { name: "", amount: "", paidByIndex: 0 }] };
 
     case "removeItem":
       return { ...state, items: state.items.filter((_, position) => position !== action.index) };
