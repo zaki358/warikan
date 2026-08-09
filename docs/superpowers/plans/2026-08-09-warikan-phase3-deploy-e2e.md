@@ -1363,6 +1363,56 @@ git commit -m "fix: code-reviewer と security-reviewer の指摘に対応"
 
 指摘が無く修正が発生しなかった場合はコミットしない。結果はこの計画に追記する。
 
+### 実施結果（2026-08-09、コミット `146b550` 時点）
+
+**CRITICAL / HIGH はどちらのレビューでも0件。このタスクでのコード修正は発生しなかった。**
+
+検証: shared 31 / api 80 / web 132、E2E 4 passed、typecheck クリーン。
+
+#### `code-reviewer`
+
+| 重大度 | 件数 |
+|---|---|
+| CRITICAL / HIGH / LOW | 0 |
+| MEDIUM | 1 |
+
+**MEDIUM: `key={index}`**（`SimpleInput.tsx:18` / `ItemsInput.tsx:27` / `EventNew.tsx:57`）— **見送り。**
+
+`members` / `items` に安定 id が無く、削除で配列位置がずれる。ただし**実害になりうる唯一の経路は既に塞がれている**。参加者を消したときに品目の `paidByIndex` がずれて支払者が別人にすり替わるのが本当の危険で、`wizardReducer.ts:65-70` がこれを補正している。
+
+補正が効いていることをミューテーションで確認した。ずらす分岐を `if (false)` に潰すと専用テスト2件が落ちる。
+
+```
+× 支払者より前のメンバーを消しても、品目の支払者は同じ人を指したままになる
+× 参加者を消すと、支払者の選択が名前のまま追従する
+```
+
+残るのはフォーカス状態の帰属のみ。入力はすべて制御コンポーネントなので表示値はずれない。
+
+#### `security-reviewer`
+
+| 重大度 | 件数 |
+|---|---|
+| CRITICAL / HIGH / MEDIUM | 0 |
+| LOW | 4 |
+
+自分で裏を取った項目:
+
+- **`Cf-Access-Authenticated-User-Email` を信用していない** — `apps/` `packages/` `e2e/` を grep したところ、出現はコメント1箇所（`auth.ts:29`、使わない理由の説明）のみ
+- **`DEV_BYPASS_EMAIL` でも許可リストが効く** — `auth.ts:63` の `if (!allowed.includes(email))` を `if (false)` に潰すと「許可リストに無いメールは 403」が落ちる。このテストは `authedFetch(..., "stranger@example.com")` 経由、つまり**バイパス経路そのもの**を通っている（`test/helpers.ts:20-28` が `DEV_BYPASS_EMAIL` を差し替える）
+- **npm audit の high は本番に届かない** — `undici` は `@cloudflare/vitest-pool-workers` → `miniflare` と `jsdom`（どちらも devDependency）経由のみ。Worker の `dependencies` は `hono` / `jose` / `zod` / `@warikan/shared` の4つで、undici を引かない
+
+LOW の扱い:
+
+| 指摘 | 扱い |
+|---|---|
+| `ACCESS_TEAM_DOMAIN` が空。埋め忘れると全リクエストが 403 になる | **Task 7 Step 2 で対応**（既に計画済み） |
+| `DEV_BYPASS_EMAIL` の分岐に環境名ガードが無い | 見送り。`wrangler.jsonc` の `vars` に無く `.dev.vars` は gitignore 済みで、本番で有効になる経路は現状無い。多層防御の追加は Plan 3 の範囲外 |
+| セキュリティヘッダー（CSP / X-Frame-Options 等）未設定 | 見送り。Access で保護され XSS シンクも無い。Plan 3 の範囲外 |
+| npm audit の high 1件・moderate 3件 | 見送り。上記のとおり本番の Worker に含まれない |
+
+**利用者の判断が要る1件（情報扱い）**: `docs/superpowers/specs/2026-08-05-warikan-cloudflare-design.md:39` に実在のメールアドレスと Cloudflare アカウント ID が書かれている。現状このリポジトリに remote は無いため露出はしていないが、将来公開する場合は伏せること。
+
 ---
 
 ## Task 7: Cloudflare Access の設定と本番デプロイ
