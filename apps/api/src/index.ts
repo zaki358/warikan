@@ -8,6 +8,7 @@ import { categoryRoutes } from "./routes/categories.js";
 import { eventRoutes } from "./routes/events.js";
 import { meRoutes } from "./routes/me.js";
 import { monthlyRoutes } from "./routes/monthly.js";
+import { userRoutes } from "./routes/users.js";
 
 const app = new Hono<AppEnv>();
 
@@ -18,6 +19,7 @@ app.get("/api/health", (c) => c.json(ok({ status: "ok" })));
 app.use("/api/*", accessAuth());
 
 app.route("/api/me", meRoutes);
+app.route("/api/users", userRoutes);
 app.route("/api/categories", categoryRoutes);
 app.route("/api/monthly", monthlyRoutes);
 app.route("/api/events", eventRoutes);
