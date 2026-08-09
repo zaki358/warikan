@@ -41,6 +41,7 @@ Plan 3 を書く時点で、実際にコードを読んで確認した。
 | `@playwright/test` の最新 | **1.62.1**（未インストール。Task 4 で入れる） |
 | `@types/node` | **未インストール**（`node_modules/@types/node` が無い）。Task 4 で `^24.13.3` を入れる。ローカルの Node は v24.13.1 |
 | `<input type="date">` の ARIA ロール | **無し**。`getByRole("textbox")` では拾えないので、日付だけ `getByLabel("日付")` を使う（`ExpenseForm.tsx:89-97`） |
+| 制御コンポーネントへの `user.type` | `value` を固定して描画すると React が毎回 DOM の値を戻すため、桁が積み上がらない。実測: "12345" → 固定 `value=""` では `[1,2,3,4,5]`、state を持つラッパ経由では `[1,12,123,1234,12345]`。**上限のテストは必ずラッパ経由で書く** |
 | `apps/api/src/db/users.ts` の `listUsers` | 実装済み・**どのルートからも未使用**。`SELECT * FROM users ORDER BY created_at, id` |
 | `POST /api/events` の上限 | `title ≤ 60` / メンバー名 `1〜30` / メンバー数 `1〜20` / 品目名 `1〜60` / 品目数 `≤ 200` / 金額 `0〜10,000,000`（`apps/api/src/routes/events.ts:19-36`） |
 | クライアント側にある上限 | タイトル `maxLength=60`、参加者名 `maxLength=30`、品目名 `maxLength=60`、参加者数 `MAX_MEMBERS=20` |
@@ -482,7 +483,7 @@ API は `0〜10,000,000` と `品目 ≤ 200` を弾くが、画面側に上限�
 
 **Files:**
 - Create: `apps/web/src/lib/limits.ts`
-- Create: `apps/web/src/lib/limits.test.ts`
+- Create: `apps/web/src/components/AmountInput.test.tsx`（**`.tsx`。JSX を書くので `.ts` では通らない**）
 - Modify: `apps/web/src/components/AmountInput.tsx`
 - Modify: `apps/web/src/features/events/wizardReducer.ts`
 - Modify: `apps/web/src/features/events/wizardReducer.test.ts`
@@ -493,40 +494,70 @@ API は `0〜10,000,000` と `品目 ≤ 200` を弾くが、画面側に上限�
 
 - [ ] **Step 1: 失敗するテストを書く**
 
-`apps/web/src/lib/limits.test.ts`:
+`apps/web/src/components/AmountInput.test.tsx`:
 
-```ts
+```tsx
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { expect, it, vi } from "vitest";
 
-import { AmountInput } from "../components/AmountInput.js";
-import { MAX_AMOUNT } from "./limits.js";
+import { MAX_AMOUNT } from "../lib/limits.js";
+import { AmountInput } from "./AmountInput.js";
 
 /**
  * API の zod は amount を 0〜10,000,000 で弾く（apps/api/src/routes/events.ts）。
  * 画面側に上限が無いと、利用者はフォームを全部埋めてから汎用の 400 を受け取る。
  * 入力段階で弾く（負値・小数を弾いているのと同じ扱い）。
  */
+
+/**
+ * **state を持つラッパ経由で描画すること。**
+ * AmountInput は制御コンポーネントなので、`value` を固定したまま `user.type` すると
+ * React が毎キーストローク後に DOM の値を props の値へ戻す。実測すると
+ * "12345" をタイプして onChange に届くのは `[1, 12, 123, 1234, 12345]` ではなく
+ * `[1, 2, 3, 4, 5]` になり、桁が積み上がらない。上限のテストが
+ * 「どんな実装でも必ず通る」空のテストになってしまう。
+ */
+function Host({ onChange }: { onChange: (value: number | "") => void }) {
+  const [value, setValue] = useState<number | "">("");
+
+  return (
+    <AmountInput
+      id="amount"
+      value={value}
+      onChange={(next) => {
+        onChange(next);
+        setValue(next);
+      }}
+    />
+  );
+}
+
 it("上限を超える金額は反映しない", async () => {
   const onChange = vi.fn();
   const user = userEvent.setup();
-  render(<AmountInput id="amount" value="" onChange={onChange} />);
+  render(<Host onChange={onChange} />);
 
+  // "10000001" は1桁ずつ積み上がる。7桁目までは上限内なので通り、
+  // 8文字目で 10,000,001 になった時点だけ弾かれる。
   await user.type(screen.getByRole("spinbutton"), String(MAX_AMOUNT + 1));
 
-  // 途中の桁は上限内なので通る。最後の1文字で上限を超えた時点だけ落ちる。
   expect(onChange).not.toHaveBeenCalledWith(MAX_AMOUNT + 1);
+  // 弾かれた入力は state に入らないので、画面には直前の値が残る。
+  // 上限判定を消すとここが 10000001 になり、この行が落ちる。
+  expect(screen.getByRole("spinbutton")).toHaveValue(1_000_000);
 });
 
 it("上限ちょうどは通す", async () => {
   const onChange = vi.fn();
   const user = userEvent.setup();
-  render(<AmountInput id="amount" value="" onChange={onChange} />);
+  render(<Host onChange={onChange} />);
 
   await user.type(screen.getByRole("spinbutton"), String(MAX_AMOUNT));
 
   expect(onChange).toHaveBeenCalledWith(MAX_AMOUNT);
+  expect(screen.getByRole("spinbutton")).toHaveValue(MAX_AMOUNT);
 });
 ```
 
@@ -548,7 +579,7 @@ it("品目は上限を超えて増えない", () => {
 - [ ] **Step 2: テストを実行して失敗することを確認する**
 
 Run: `npm test -w @warikan/web`
-Expected: FAIL — `./limits.js` が解決できない
+Expected: FAIL — `../lib/limits.js` と `../../lib/limits.js` が解決できない
 
 - [ ] **Step 3: 上限値のファイルを作る**
 
@@ -609,7 +640,18 @@ Expected: PASS（web 132 tests）
 Run: `npm run typecheck`
 Expected: エラーなし
 
-- [ ] **Step 7: コミット**
+- [ ] **Step 7: ミューテーションで、上限のテストが本当に効いているか確かめる**
+
+`AmountInput.tsx` の判定から `|| parsed > MAX_AMOUNT` を一時的に外す。
+
+Run: `npm test -w @warikan/web`
+Expected: 「上限を超える金額は反映しない」が FAIL する（`toHaveValue(1000000)` が `10000001` を受け取る）。
+
+**FAIL しなければテストが空回りしている。** その場合は `Host` ラッパ経由で描画できているかを疑う（`value` を固定して描画すると桁が積み上がらず、どんな実装でも通ってしまう）。確認できたら**必ず元に戻す**。
+
+同様に `wizardReducer.ts` の `state.items.length >= MAX_ITEMS ? state :` を一時的に外し、「品目は上限を超えて増えない」が FAIL することを確認して戻す。
+
+- [ ] **Step 8: コミット**
 
 ```bash
 git add apps/web
