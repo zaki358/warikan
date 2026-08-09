@@ -3258,9 +3258,28 @@ git commit -m "feat: 単発割り勘のウィザード状態を useReducer で�
 
 ## Task 10: 単発割り勘の入力画面
 
+**実施時に判明した不備（実測とミューテーションで確認）:**
+
+1. **同じ形の行が並ぶのに、ラベルが全行同じだった（修正済み）。** Task 8 の送金ボタンと同根。
+   - `ItemsInput` は全行が「品目名」「金額」「支払った人」で、`getByLabelText("品目名")` が `Found multiple elements` になる。行番号入り（`品目 1 の金額` など）に変更した。
+   - `SimpleInput` の金額ラベルは参加者名そのもの。**参加者名は重複しうる**（reducer 側にも「同名の参加者がいても通る」テストがある）ため、同名の行を利用者も読み上げも区別できない。`1. 田中` / `2. 田中` と行番号を前に置く形に変更し、テストを2件追加した。
+
+2. **確認して問題なかったもの（いずれもミューテーションで裏取り済み）:**
+   - `wizardErrors` は `role="alert"` のバナーに全メッセージを出す。ボタンの無効化だけでなく**理由が画面に出る**。バナーを描かないミューテーションで1件 FAIL。Task 9 で追加した「品目の金額を入力してください」も見える。
+   - 参加者を削除したとき、品目の支払者 `<select>` の**表示名**が正しく追従する（消えた人が残らない、別人にすり替わらない）。`value` を固定するミューテーションで1件 FAIL。
+   - 二重送信は `isPending` で防げている。連打しても `POST` は1回。防止を外すミューテーションで1件 FAIL。
+   - 画面側に `useState` は1つも無く、状態は `App` の `useReducer` のみ。Task 7 の「後から変わっても反映されない」構造にはなっていない。
+
+3. **Step 8（スモークテストの `renderAt` 差し替え）は実施不要だった。** Task 7 / Task 8 の時点で `QueryClientProvider` を入れる形に直っており、新 `EventNew` も `<h1>新しい割り勘</h1>` を保つためルーティングテストは落ちない。
+
+4. **計画は画面のテストを0件としていたが、上記の確認のため3ファイル12件を追加した**（`ItemsInput` 4、`EventNew` 2、`EventInput` 4、`SimpleInput` 2）。いずれも対応するミューテーションで落ちることを確認済み。
+
+5. **Step 6 / Step 9 の期待件数 63 は古い。** 実際は web 113 件。
+
 **Files:**
 - Create: `apps/web/src/features/events/queries.ts`
 - Create: `apps/web/src/features/events/SimpleInput.tsx`, `ItemsInput.tsx`
+- Create: `ItemsInput.test.tsx`, `SimpleInput.test.tsx`, `routes/EventNew.test.tsx`, `routes/EventInput.test.tsx`（計画外。上記4を参照）
 - Modify: `apps/web/src/routes/EventNew.tsx`, `apps/web/src/routes/EventInput.tsx`, `apps/web/src/App.tsx`
 
 **Interfaces:**
@@ -3271,7 +3290,7 @@ git commit -m "feat: 単発割り勘のウィザード状態を useReducer で�
 
 ウィザードの状態は2画面（`/events/new` と `/events/new/input`）にまたがる。URL に載せるには大きすぎ、サーバーに置くと旧実装の Cookie 依存を再現してしまう。`App` で `useReducer` を持ち、両画面に props で渡す。
 
-- [ ] **Step 1: events のフックを書く**
+- [x] **Step 1: events のフックを書く**
 
 `apps/web/src/features/events/queries.ts`:
 
@@ -3330,7 +3349,7 @@ export const useToggleSettlement = (eventId: string) => {
 };
 ```
 
-- [ ] **Step 2: シンプルモードの入力欄を書く**
+- [x] **Step 2: シンプルモードの入力欄を書く**
 
 `apps/web/src/features/events/SimpleInput.tsx`:
 
@@ -3367,7 +3386,7 @@ export function SimpleInput({ state, dispatch }: Props) {
 }
 ```
 
-- [ ] **Step 3: 品目モードの入力欄を書く**
+- [x] **Step 3: 品目モードの入力欄を書く**
 
 `apps/web/src/features/events/ItemsInput.tsx`:
 
@@ -3480,7 +3499,7 @@ export function ItemsInput({ state, dispatch }: Props) {
 }
 ```
 
-- [ ] **Step 4: step1 の画面を書く**
+- [x] **Step 4: step1 の画面を書く**
 
 `apps/web/src/routes/EventNew.tsx` を次に置き換える:
 
@@ -3604,7 +3623,7 @@ export function EventNew({ state, dispatch }: Props) {
 }
 ```
 
-- [ ] **Step 5: step2 の画面を書く**
+- [x] **Step 5: step2 の画面を書く**
 
 `apps/web/src/routes/EventInput.tsx` を次に置き換える:
 
@@ -3683,7 +3702,7 @@ export function EventInput({ state, dispatch, onCreated }: Props) {
 }
 ```
 
-- [ ] **Step 6: reducer に reset を足す**
+- [x] **Step 6: reducer に reset を足す**
 
 作成に成功したらウィザードを初期状態へ戻す必要がある。先に reducer 側を用意する。
 
@@ -3717,9 +3736,9 @@ describe("reset", () => {
 ```
 
 Run: `npm test -w @warikan/web`
-Expected: PASS（既存 62 + reset 1 = 63 tests）
+Expected: PASS（web 113 tests。上記5を参照）
 
-- [ ] **Step 7: App でウィザードの状態を持つ**
+- [x] **Step 7: App でウィザードの状態を持つ**
 
 `apps/web/src/App.tsx` を次に置き換える:
 
@@ -3767,7 +3786,7 @@ export function App() {
 }
 ```
 
-- [ ] **Step 8: スモークテストを props 対応に直す**
+- [x] **Step 8: スモークテストを props 対応に直す**
 
 `apps/web/src/smoke.test.tsx` の `/events/new` のケースが、`App` 経由なので props は不要のまま通る。変更は不要。ただし `QueryClientProvider` が無いと `EventInput` が例外になるため、`renderAt` を次に置き換える:
 
@@ -3789,15 +3808,15 @@ const renderAt = (path: string) => {
 };
 ```
 
-- [ ] **Step 9: テストと型チェックを通す**
+- [x] **Step 9: テストと型チェックを通す**
 
 Run: `npm test -w @warikan/web`
-Expected: PASS（63 tests）
+Expected: PASS（web 113 tests）
 
 Run: `npm run typecheck -w @warikan/web`
 Expected: エラーなし
 
-- [ ] **Step 10: コミット**
+- [x] **Step 10: コミット**
 
 ```bash
 git add apps/web
@@ -4101,7 +4120,7 @@ git commit -m "feat: 単発割り勘の結果画面とホームを追加"
 - [ ] **Step 1: 全テストと型チェックを通す**
 
 Run: `npm test`
-Expected: shared 31 + api 76 + web 116 = 223 tests すべて PASS
+Expected: shared 31 + api 76 + web 129 = 236 tests すべて PASS
 
 Run: `npm run typecheck`
 Expected: エラーなし

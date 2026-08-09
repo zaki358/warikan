@@ -16,7 +16,13 @@ export function SimpleInput({ state, dispatch }: Props) {
 
       {state.members.map((member, index) => (
         <div className="form-group" key={index}>
-          <label htmlFor={`paid-${index}`}>{member.name.trim() || `参加者 ${index + 1}`}</label>
+          {/*
+            参加者名は重複しうるため、名前だけをラベルにすると同名の行を区別できない。
+            行番号を前に置いて一意にする（品目側の「品目 N の…」と揃える）。
+          */}
+          <label htmlFor={`paid-${index}`}>
+            {index + 1}. {member.name.trim() || `参加者 ${index + 1}`}
+          </label>
           <AmountInput
             id={`paid-${index}`}
             value={member.paid}
