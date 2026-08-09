@@ -22,6 +22,8 @@
 | `docs/superpowers/plans` | 実装計画 |
 | `.claude/agents` | プロジェクト固有のサブエージェント |
 
+[docs/app-analysis.md](docs/app-analysis.md) は移行前の Flask 実装の解析記録。移行で修正した既知の問題（メンバーを名前で識別、端数の丸め誤差、履歴5件上限、ウィザード状態の Cookie 依存）が記載されている。
+
 ## 開発コマンド
 
 ```bash
