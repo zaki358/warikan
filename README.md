@@ -64,6 +64,22 @@ npm test
 npm run typecheck
 ```
 
+E2E（Playwright）。**起動済みの `wrangler dev` に対して実行する**ので、先にビルドとサーバ起動が要る:
+
+```bash
+npm run build -w @warikan/web
+```
+
+```bash
+npm run dev -w @warikan/api -- --port 8788
+```
+
+```bash
+npm run test:e2e
+```
+
+ブラウザ本体が入っていなければ `npx playwright install chromium` を一度だけ実行する。E2E は `2099-01` をテスト専用の月として使い、実行のたびにその月だけを消す。実データには触れない。
+
 ## 割り勘のモード
 
 | モード | 内容 |
