@@ -41,6 +41,8 @@ Plan 3 を書く時点で、実際にコードを読んで確認した。
 | `@playwright/test` の最新 | **1.62.1**（未インストール。Task 4 で入れる） |
 | `@types/node` | **未インストール**（`node_modules/@types/node` が無い）。Task 4 で `^24.13.3` を入れる。ローカルの Node は v24.13.1 |
 | `<input type="date">` の ARIA ロール | **無し**。`getByRole("textbox")` では拾えないので、日付だけ `getByLabel("日付")` を使う（`ExpenseForm.tsx:89-97`） |
+| `monthly_periods` / `monthly_expenses` の列 | 期間は `year` / `month` の**整数2列**（`UNIQUE (year, month)`）、支出は `period_id` で参照する。**`ym` / `period_ym` という列は存在しない**（`apps/api/migrations/0001_init.sql:15-37`） |
+| ローカル D1 の `users` | すでにちょうど2行（`me@example.com` / `partner@example.com`、後者の表示名は `partner`）。`email` に UNIQUE 制約があるので `INSERT OR IGNORE` は無視される |
 | 制御コンポーネントへの `user.type` | `value` を固定して描画すると React が毎回 DOM の値を戻すため、桁が積み上がらない。実測: "12345" → 固定 `value=""` では `[1,2,3,4,5]`、state を持つラッパ経由では `[1,12,123,1234,12345]`。**上限のテストは必ずラッパ経由で書く** |
 | `apps/api/src/db/users.ts` の `listUsers` | 実装済み・**どのルートからも未使用**。`SELECT * FROM users ORDER BY created_at, id` |
 | `POST /api/events` の上限 | `title ≤ 60` / メンバー名 `1〜30` / メンバー数 `1〜20` / 品目名 `1〜60` / 品目数 `≤ 200` / 金額 `0〜10,000,000`（`apps/api/src/routes/events.ts:19-36`） |
@@ -832,9 +834,15 @@ export default async function globalSetup(): Promise<void> {
   }
 
   // テスト専用の月だけを消す。利用者の実データには触れない。
+  // monthly_periods は year / month の整数列で持ち、monthly_expenses は
+  // period_id で参照する（period_ym / ym という列は存在しない）。
+  const [yearStr, monthStr] = TEST_YM.split("-");
+  const year = Number(yearStr);
+  const month = Number(monthStr);
   execSql(
-    `DELETE FROM monthly_expenses WHERE period_ym = '${TEST_YM}';` +
-      ` DELETE FROM monthly_periods WHERE ym = '${TEST_YM}';`,
+    `DELETE FROM monthly_expenses WHERE period_id IN` +
+      ` (SELECT id FROM monthly_periods WHERE year = ${year} AND month = ${month});` +
+      ` DELETE FROM monthly_periods WHERE year = ${year} AND month = ${month};`,
   );
 
   // 月次は登録済みユーザー全員で割る（apps/api/src/services/settle.ts）。
