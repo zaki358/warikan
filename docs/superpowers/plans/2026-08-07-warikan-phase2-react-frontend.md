@@ -3827,14 +3827,32 @@ git commit -m "feat: 単発割り勘の入力画面（シンプル・品目別�
 
 ## Task 11: 単発割り勘の結果画面とホーム
 
+**実施時に判明した不備（実測とミューテーションで確認）:**
+
+1. **Step 1 のコードは、Task 8 で直した不具合を単発側で再導入していた（修正済み）。** 消し込みボタンが全行「支払い済みにする」で名前を持たない。**単発は最大20人＝送金が最大19件**並ぶため、月次（常に1件）と違って実際に問題になる。
+   さらに**単発は参加者名が重複しうる**ので、`ResultView` と同じ「誰から誰への何円か」だけでは一意にならない（同名2組なら同じラベルの行が2つできる）。行番号を先頭に置き `1. 田中 から 佐藤 への ¥3,000を支払い済みにする` とした。送金3件（うち2件は名前・金額とも完全一致）のフィクスチャで検証している。
+
+2. **同名の参加者で表示が破綻していた（修正済み）。** 機能は `nameByMember`（id キー）なので壊れないが、支払い状況の一覧・品目の支払者名・送金行のすべてで同名が見分けられなかった。`SimpleInput` と同じ `1. 田中` 形式に揃えた。並び順も API が `ORDER BY position`（入力順）を返すので入力画面と一致する。
+
+3. **消し込みの識別子は `settlement.id`**（月次の配列 index とは別物）。`PATCH /api/events/:id/settlements/:settlementId` と一致している。index を送るミューテーションで2件 FAIL することを確認済み。
+
+4. **ミューテーション検証（すべて kill 済み）:** `aria-label` 削除 → 3件、`settlement.id` → `String(index)` → 2件、送金の逆順表示 → 2件、行番号を落とす → 2件、`window.confirm` 削除 → 1件、ホームの合計を加算しない → 2件、ホームの `isDirty` を常に false / 常に true → 各1件、ホームの一覧リンク先を固定値に → 1件。
+
+5. **Step 3（スモークテストに fetch スタブを足す）は実施不要だった。** Task 7 / 8 の時点で `smoke.test.tsx` は `QueryClientProvider` と「解決しない Promise」の fetch スタブを持っている。追加すると二重になる。
+
+6. **確認して問題なかったもの:** `EventDetail` / `Home` とも `useState` は0個（Task 7 の非決定な初期値問題は構造上起きない）。`GET /api/events` はエンベロープ直下が配列で `EventSummary[]` と一致（実装で確認）。`GET /api/monthly/:ym` は期間が無ければ作るのでホームの初回でも 404 にならない。「今月の合計」は API に無い値なので画面側で `expenses` を合算するのが正しい。金額はすべて `formatYen` 経由。`isDirty` バナーには `ResultView` に合わせて `role="alert"` を足した（計画には無かった）。
+
+7. **Step 4 の期待件数 63 は古い。** 実際は web 126 件（計画外のテスト2ファイル13件を追加）。
+
 **Files:**
 - Modify: `apps/web/src/routes/EventDetail.tsx`, `apps/web/src/routes/Home.tsx`
+- Create: `apps/web/src/routes/EventDetail.test.tsx`, `Home.test.tsx`（計画外。上記7を参照）
 
 **Interfaces:**
 - Consumes: Task 10 のフック、`useMonthly`（Task 6）、`formatYen`（Task 4）
 - Produces: なし（画面の完成）
 
-- [ ] **Step 1: 結果画面を書く**
+- [x] **Step 1: 結果画面を書く**
 
 `apps/web/src/routes/EventDetail.tsx` を次に置き換える:
 
@@ -3973,7 +3991,7 @@ export function EventDetail() {
 
 削除は元に戻せないため `window.confirm` を挟む。E2E からも操作できるよう、確認ダイアログは標準のものを使う。
 
-- [ ] **Step 2: ホーム画面を書く**
+- [x] **Step 2: ホーム画面を書く**
 
 `apps/web/src/routes/Home.tsx` を次に置き換える:
 
@@ -4064,7 +4082,7 @@ a.list-row:active {
 }
 ```
 
-- [ ] **Step 3: スモークテストを更新する**
+- [x] **Step 3: スモークテストを更新する**
 
 `apps/web/src/smoke.test.tsx` の `/` のケースは `Home` の `<h1>割り勘</h1>` を引き続き見るため変更不要。ただし `Home` が `useMonthly` / `useEvents` を呼ぶようになったので、`fetch` を差し替えないとエラーが出る。テスト先頭に追加する:
 
@@ -4090,15 +4108,15 @@ afterEach(() => {
 });
 ```
 
-- [ ] **Step 4: テストと型チェックを通す**
+- [x] **Step 4: テストと型チェックを通す**
 
 Run: `npm test -w @warikan/web`
-Expected: PASS（63 tests）
+Expected: PASS（web 126 tests。上記7を参照）
 
 Run: `npm run typecheck -w @warikan/web`
 Expected: エラーなし
 
-- [ ] **Step 5: コミット**
+- [x] **Step 5: コミット**
 
 ```bash
 git add apps/web
@@ -4120,7 +4138,7 @@ git commit -m "feat: 単発割り勘の結果画面とホームを追加"
 - [ ] **Step 1: 全テストと型チェックを通す**
 
 Run: `npm test`
-Expected: shared 31 + api 76 + web 129 = 236 tests すべて PASS
+Expected: shared 31 + api 76 + web 126 = 233 tests すべて PASS
 
 Run: `npm run typecheck`
 Expected: エラーなし
