@@ -3,13 +3,17 @@
   --surface: #fff;
   --text: #1a1a2e;
   --text-sub: #555;
-  --text-muted: #777;
-  --accent: #5b8dee;
-  --accent-strong: #4a7de0;
+  --text-muted: #696969;
+  /*
+    文字色として使う色は、載せる背景に対して 4.5:1 以上を確保する。
+    --accent は白（ボタン文字）と --accent-bg（トグル選択中）の両方に載るため、
+    厳しいほうの --accent-bg 基準で決めている。
+  */
+  --accent: #3d6ad0;
   --accent-bg: #eef3fd;
-  --danger: #dc2626;
+  --danger: #b91c1c;
   --danger-bg: #fee2e2;
-  --success: #16a34a;
+  --success: #15803d;
   --success-bg: #dcfce7;
   --border: #e0e0e0;
   --radius-card: 16px;
@@ -35,6 +39,20 @@ body {
   align-items: center;
 }
 
+/*
+  body が align-items: center の flex コンテナなので、幅を指定しない #root は
+  中身なりの幅（shrink-to-fit）になる。すると .container の width: 100% が
+  ビューポートではなく「中身の幅」に対して解決され、max-width: 480px が効かず、
+  長い品目名では .ellipsis が発動する前にページ全体が横に伸びてしまう。
+  #root を明示的に広げて、中央寄せはこちらで行う。
+*/
+#root {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
 .container {
   width: 100%;
   max-width: 480px;
@@ -51,6 +69,15 @@ body {
 h1 {
   font-size: 1.4rem;
   margin-bottom: 6px;
+}
+
+/*
+  月次の記録画面では、月ラベルがそのままページの見出しになる。
+  前月／次月ボタンと同じ行に置くので、h1 の既定サイズは使わない。
+*/
+.month-title {
+  font-size: 1rem;
+  margin-bottom: 0;
 }
 
 h2 {
@@ -79,7 +106,8 @@ input[type="number"],
 input[type="date"],
 select {
   width: 100%;
-  padding: 11px 14px;
+  /* 上下 12px + 文字 19px + 枠線 3px でタップ領域の 44px にちょうど届く。 */
+  padding: 12px 14px;
   border: 1.5px solid var(--border);
   border-radius: var(--radius-control);
   font-size: 1rem;
@@ -88,8 +116,13 @@ select {
   transition: border-color 0.15s;
 }
 
+/*
+  ボタン風のリンク（.btn を当てた <a>）や一覧の行リンクにも同じリングを出す。
+  a を入れないとブラウザ既定の細い黒枠になり、ボタンと見た目が揃わない。
+*/
 input:focus,
 select:focus,
+a:focus-visible,
 button:focus-visible {
   border-color: var(--accent);
   outline: 2px solid var(--accent);
@@ -104,6 +137,14 @@ button:focus-visible {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
+}
+
+/*
+  金額は桁数が知れているが、支払者の選択肢には参加者名がそのまま入る。
+  半々にするとスマホ幅で名前が数文字で切れ、誰を選んでいるか分からなくなる。
+*/
+.row2-amount-payer {
+  grid-template-columns: 1fr 1.6fr;
 }
 
 .actions {
@@ -243,6 +284,19 @@ button:focus-visible {
 .grow {
   flex: 1;
   min-width: 0;
+}
+
+/*
+  送金行だけは消し込みボタンの文字が長く（「支払い済みにする」）、スマホ幅では
+  「誰から誰へ」と同じ行に収まらない。名前側が潰れて2行3行に割れるので、
+  ボタンを次の行へ送る。名前は省略せずに折り返す（送金は相手が分からないと意味がない）。
+*/
+.transfer-row {
+  flex-wrap: wrap;
+}
+
+.transfer-row > .btn-sm {
+  flex: 0 0 100%;
 }
 
 .ellipsis {

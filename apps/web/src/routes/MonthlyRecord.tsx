@@ -52,7 +52,8 @@ export function MonthlyRecord() {
             ← 前月
           </Button>
           <div className="grow" style={{ textAlign: "center" }}>
-            <strong>{ymLabel(ym)}</strong>
+            {/* この画面の見出し。精算画面（h1「◯年◯月の精算」）と階層を揃える。 */}
+            <h1 className="month-title">{ymLabel(ym)}</h1>
           </div>
           <Button
             variant="secondary"

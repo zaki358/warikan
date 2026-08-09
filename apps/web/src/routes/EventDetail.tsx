@@ -100,7 +100,7 @@ export function EventDetail() {
             const what = `${index + 1}. ${from} から ${to} への ${formatYen(settlement.amount)}`;
 
             return (
-              <div className="list-row" key={settlement.id}>
+              <div className="list-row transfer-row" key={settlement.id}>
                 <div className="grow">
                   💸 {from} → {to}
                 </div>

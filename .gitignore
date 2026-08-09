@@ -21,6 +21,8 @@ venv/
 coverage/
 playwright-report/
 test-results/
+# ui-inspector / web-debugger が Playwright MCP 経由で吐くスナップショットと画像
+.playwright-mcp/
 
 # Editor / OS
 .DS_Store

@@ -47,7 +47,9 @@ describe("ルーティング", () => {
 
     // 記録画面は Task 7 で実装に置き換わり、仮の見出し「月次の記録」は無くなった。
     // 代わりに URL の :ym から作られる月ラベルを見る。パラメータの解釈まで確かめられる。
-    expect(screen.getByText("2026年8月")).toBeInTheDocument();
+    // level 1 まで見るのは、この月ラベルがページの見出しそのものだから。
+    // 精算画面（h1「2026年8月の精算」）と階層を揃える意図を固定する。
+    expect(screen.getByRole("heading", { level: 1, name: "2026年8月" })).toBeInTheDocument();
   });
 
   it("/monthly/2026-08/result で精算画面を表示する", () => {

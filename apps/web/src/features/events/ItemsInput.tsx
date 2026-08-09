@@ -39,7 +39,7 @@ export function ItemsInput({ state, dispatch }: Props) {
             />
           </div>
 
-          <div className="row2">
+          <div className="row2 row2-amount-payer">
             <div className="form-group">
               <label htmlFor={`item-amount-${index}`}>品目 {index + 1} の金額</label>
               <AmountInput

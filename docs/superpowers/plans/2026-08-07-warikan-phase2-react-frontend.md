@@ -4127,15 +4127,45 @@ git commit -m "feat: 単発割り勘の結果画面とホームを追加"
 
 ## Task 12: 通しの動作確認と仕上げ
 
+**実施時に判明したこと（実測とミューテーションで確認）:**
+
+1. **`#root` に幅指定が無く、`.container` の `max-width: 480px` が一度も効いていなかった（修正済み）。** `body` が `display: flex; align-items: center` なので、幅を指定しない `#root` は shrink-to-fit になる。`.container { width: 100% }` はその「中身なりの幅」に対して解決されるため、ビューポート幅が反映されない。実測: PC 幅 1280 でカードが 321〜383px とページごとにばらつき（期待値 480px）、スマホ幅では `.ellipsis` が発動する前にページ全体が伸び、**品目名が全角13文字で横スクロールが発生**していた（`scrollWidth 363 > clientWidth 360`、最悪 60px）。`#root { width: 100%; display: flex; flex-direction: column; align-items: center }` を追加して解消。修正後は品目名・イベント名とも上限の 60 文字で `scrollWidth 360 = clientWidth 360`、1行に省略される。ホームの「今月の記録」ボタンの2行折返し（高さ 76px → 52px）も同時に直った。**この1点が 🔴 3件すべての根本原因だった。**
+
+2. **レイアウトの不具合は 233 件のテストを1件も落とさなかった。** jsdom はスタイルを解決しないので、幅・折り返し・横スクロールはテストから見えない。Task 2 の「静的配信を検証できない」と同種の盲点なので、CLAUDE.md に併記した。**測る以外に検知手段が無い。**
+
+3. **送金行はボタンの文字数に負けて崩れていた（修正済み）。** `.grow` に `ellipsis` が無く、右の「支払い済みにする」が 137px を占めるため名前側が潰れる。実測で「川口」「山田」という2文字の名前でも2行、参加者名の上限（30文字）では `.grow` 幅 88px・**行高 336px**。ただし `ellipsis` を足すと今度は送金相手が読めなくなるため、`.transfer-row` を追加してボタンを次の行へ送り、名前は折り返させる方針にした。修正後は通常の名前で1行（行高 103px）、30文字×2でも行高 199px で横スクロールなし。`ResultView` と `EventDetail` の両方に適用。
+
+4. **文字色が軒並み WCAG AA（4.5:1）を割っていた（修正済み）。** 実測値 → 修正後: プライマリボタン 3.24 → **5.03**、トグル選択中 2.91 → **4.53**、`.btn-success` 3.00 → **5.30**、`.btn-danger` 3.95 → **5.30**、`.muted` 4.48（ページ背景では 3.99）→ **5.49**。`--accent` は白と `--accent-bg` の両方に載るので厳しいほう基準で `#3d6ad0` にした。未使用だった `--accent-strong` は、`--accent` を暗くすると「strong のほうが明るい」という逆転が起きるため削除した。
+
+5. **月次の記録画面に `h1` が無かった（修正済み）。** 月ラベルが `<strong>` で、見出しが `h2` から始まっていた。精算画面には `h1`（「2026年8月の精算」）があるので階層が不揃い。`h1.month-title` に変更し、`smoke.test.tsx` の assertion を `getByText` から `getByRole("heading", { level: 1 })` に強めた。ミューテーション（`h1` → `strong`）で1件 FAIL を確認済み。
+
+6. **入力欄のタップ領域が 42〜43px で 44px に届いていなかった（修正済み）。** `padding: 11px 14px` → `12px 14px` で全入力が 44px 以上になった（実測 44 / 44 / 45 / 46px）。
+
+7. **品目別の支払者 `<select>` が 135px しかなく、全角6文字で切れていた（修正済み）。** `.row2` が金額と半々に割るため。`.row2-amount-payer`（`1fr 1.6fr`）を足して 166px にした。「やまだたろう」（実測 95px）が内寸 135px に収まる。金額側 104px は7桁でも収まる。
+
+8. **`/monthly/:ym` の直接オープンは 404 にならない（Task 2 の `assets` 設定の実地確認）。** `curl` で `/` と `/monthly/2026-08` がともに `200 text/html`、ブラウザでも記録画面が描画された。`/api/health` は JSON を返す。
+
+9. **月次の精算は「登録済みユーザー全員」で割る（`settle.ts` が `listUsers` を使う）。** ローカル DB に自分1人しか居ないと `perPerson` が総額と一致してしまい 2人割りを確認できないため、`partner@example.com` を local D1 に投入して通した。結果: 合計 ¥14,000 / 一人 ¥7,000 / 送金 partner → me ¥7,000。
+
+10. **未計算の月で API が 404 を返すのは想定どおりだが、ブラウザのコンソールには赤いエラーが1件出る。** UI 側は「まだ計算していません。」を出して正しく吸収している。JS の例外ではなくネットワーク層のログなので実害は無い。
+
+11. **カテゴリ別内訳の割合は合計が 100% にならないことがある。** 実測 49 + 23 + 18 + 11 = 101%。各カテゴリを独立に四捨五入しているため。金額ではなく表示上の割合なので精算結果には影響しない。**未修正。**
+
+12. **`ui-inspector` の 🟡 のうち、次は見送った（Plan 3 の候補）。** ①「品目を追加」直後に未入力を責めるバナーが出る（送信試行前は抑制したいが、`submitted` 状態の追加が要る）②スマホでソフトキーボードが「記録する」を隠す（フォーム位置の再設計が要る）③`Toggle` に矢印キー移動と roving tabindex が無い ④支払者トグルが1択になる制約（Plan 3 の `GET /api/users` で解消予定）⑤`input:focus` が `:focus-visible` でないためマウス操作でもリングが出る。
+
 **Files:**
 - Modify: `README.md`, `CLAUDE.md`
-- Modify: `apps/web/src/*`（`ui-inspector` の指摘に応じて）
+- Modify: `apps/web/src/styles.css`（`#root` の幅、送金行、配色、タップ領域、フォーカスリング）
+- Modify: `apps/web/src/routes/MonthlyRecord.tsx`（月ラベルを `h1` に）
+- Modify: `apps/web/src/routes/EventDetail.tsx`、`apps/web/src/features/monthly/ResultView.tsx`（`.transfer-row`）
+- Modify: `apps/web/src/features/events/ItemsInput.tsx`（支払者 `<select>` の幅）
+- Modify: `apps/web/src/smoke.test.tsx`（`h1` を assertion で固定）
 
 **Interfaces:**
 - Consumes: なし
 - Produces: なし
 
-- [ ] **Step 1: 全テストと型チェックを通す**
+- [x] **Step 1: 全テストと型チェックを通す**
 
 Run: `npm test`
 Expected: shared 31 + api 76 + web 126 = 233 tests すべて PASS
@@ -4143,7 +4173,7 @@ Expected: shared 31 + api 76 + web 126 = 233 tests すべて PASS
 Run: `npm run typecheck`
 Expected: エラーなし
 
-- [ ] **Step 2: 本番と同じ構成でビルドして起動する**
+- [x] **Step 2: 本番と同じ構成でビルドして起動する**
 
 ```bash
 npm run build -w @warikan/web
@@ -4153,7 +4183,7 @@ npm run build -w @warikan/web
 npm run dev -w @warikan/api
 ```
 
-- [ ] **Step 3: 3モードを手で通す**
+- [x] **Step 3: 3モードを手で通す**
 
 ブラウザで `http://localhost:8787` を開き、次を順に確認する。
 
@@ -4172,7 +4202,7 @@ npm run dev -w @warikan/api
 
 10 が失敗する場合は Task 2 の `assets` 設定を疑う。
 
-- [ ] **Step 4: ui-inspector にレイアウトを検査させる**
+- [x] **Step 4: ui-inspector にレイアウトを検査させる**
 
 `ui-inspector` サブエージェントを次の入力で呼ぶ。
 
@@ -4188,7 +4218,7 @@ npm run dev -w @warikan/api
 
 報告された 🔴 重大（横スクロール、44px 未満のタップ領域、コントラスト比不足）は、このタスクの中で直す。🟡 改善推奨は判断して取捨する。**`ui-inspector` はコードを修正しないので、修正は呼び出し側が行う。**
 
-- [ ] **Step 5: 開発サーバーを停止する**
+- [x] **Step 5: 開発サーバーを停止する**
 
 Ctrl+C だけでは子の `workerd` が残る。warikan のプロセスツリーだけを親から順に落とす。
 
@@ -4196,7 +4226,7 @@ Ctrl+C だけでは子の `workerd` が残る。warikan のプロセスツリー
 powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { \$_.CommandLine -like '*warikan*' -and \$_.Name -in @('node.exe','workerd.exe') } | Select-Object ProcessId,ParentProcessId,Name,CreationDate"
 ```
 
-- [ ] **Step 6: README を更新する**
+- [x] **Step 6: README を更新する**
 
 `README.md` の構成表に `apps/web` を足し、既知の制約を明記する。
 
@@ -4214,7 +4244,7 @@ powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { \
 月次モードの支払者トグルには、ログイン中の自分と「その月の支出に現れたもう一人」しか出ない。相手がまだ1件も記録していない月では相手を選べず、表示名も「パートナー」の固定文言になる。API に登録済みユーザー一覧のエンドポイントが無いため。Plan 3 で `GET /api/users` を追加して解消する。
 ```
 
-- [ ] **Step 7: CLAUDE.md を更新する**
+- [x] **Step 7: CLAUDE.md を更新する**
 
 「ディレクトリ構成」表の `apps/web` の行を次に差し替える:
 
@@ -4245,7 +4275,7 @@ npm run build -w @warikan/web
 - react-router は v8。`react-router-dom` は使わず、すべて `react-router` から import する
 ```
 
-- [ ] **Step 8: コミット**
+- [x] **Step 8: コミット**
 
 ```bash
 git add -A

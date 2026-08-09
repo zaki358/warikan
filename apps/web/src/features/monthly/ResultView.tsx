@@ -76,7 +76,10 @@ export function ResultView({ snapshot, isDirty, isBusy, onRecalculate, onToggleT
             const what = `${from} から ${to} への ${formatYen(transfer.amount)}`;
 
             return (
-              <div className="list-row" key={`${transfer.fromId}-${transfer.toId}-${index}`}>
+              <div
+                className="list-row transfer-row"
+                key={`${transfer.fromId}-${transfer.toId}-${index}`}
+              >
                 <div className="grow">
                   💸 {from} → {to}
                 </div>

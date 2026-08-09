@@ -19,7 +19,7 @@
 |---|---|
 | `packages/shared` | 精算ロジック（純関数）と共通の型。DB にも HTTP にも依存しない |
 | `apps/api` | Hono の API（Cloudflare Workers + D1） |
-| `apps/web` | React + Vite のフロントエンド（Plan 2 で作成） |
+| `apps/web` | React + Vite のフロントエンド |
 | `legacy` | 移行前の Flask 実装。パリティ確認用で、移行完了後に削除する |
 | `docs/superpowers/specs` | 設計書 |
 | `docs/superpowers/plans` | 実装計画 |
@@ -43,7 +43,19 @@ npm run migrate:local -w @warikan/api
 npm run dev -w @warikan/api
 ```
 
-`http://localhost:8787` で立つ。`npm test` で全テスト（`packages/shared` と `apps/api`）、`npm run typecheck` で型チェック。
+`http://localhost:8787` で立つ。`npm test` で全テスト（`packages/shared` / `apps/api` / `apps/web`）、`npm run typecheck` で型チェック。
+
+フロントだけを開発するときは Vite の dev サーバーを使う（`/api` はローカルの Worker に転送されるので、別ターミナルで `npm run dev -w @warikan/api` も要る）。
+
+```bash
+npm run dev -w @warikan/web
+```
+
+本番と同じ構成で確かめるときは、web をビルドしてから Worker を起動する。`/api/*` は Worker、それ以外は `apps/web/dist` の SPA が返る。**ビルドを忘れると古い `dist` が配信される**ので、画面の変更を手で確認するときは必ず先に走らせること。
+
+```bash
+npm run build -w @warikan/web
+```
 
 `.dev.vars` の `DEV_BYPASS_EMAIL` は Access の JWT 検証を飛ばすだけで、`ACCESS_ALLOWED_EMAILS` の許可リストは常に効く。
 
@@ -52,6 +64,8 @@ npm run dev -w @warikan/api
 カバレッジは v8 プロバイダが workerd 上で動かない（`node:inspector/promises` を解決できない）。計測するときは `@vitest/coverage-istanbul` を入れて `--coverage.provider=istanbul` を使う。
 
 **`vitest` では静的配信を検証できない**: `@cloudflare/vitest-pool-workers` は `wrangler.jsonc` の `assets` を読み込むが Asset Worker を再現しない。テスト内では `/` も `/monthly/2026-08` も Hono の 404 になる。`run_worker_first` を壊しても全テストが通ってしまうため、`assets` の振り分けを変えたときは `wrangler dev` を起動して手で確認すること（`run_worker_first: ["/api/*"]` を外すと `/api/health` が SPA の HTML を返し API が全滅する）。
+
+**`vitest` ではレイアウトを検証できない**: jsdom はスタイルを解決しないので、幅・折り返し・横スクロールはテストで一切見えない。実際 Plan 2 では `#root` に幅指定が無く `.container` の `max-width: 480px` が効かないまま 233 件すべてが通っていた。CSS やレイアウトを変えたときは `wrangler dev` を起動して `ui-inspector` に検査させること。テストで固定できるのは見出し階層やアクセシブル名までで、その先は測るしかない。
 
 ## 移行の要点
 
@@ -79,6 +93,9 @@ npm run dev -w @warikan/api
 - メールアドレスをソース・マイグレーション・テストフィクスチャに実在の値で書かない。テストは `me@example.com` / `partner@example.com` を使う
 - API レスポンスは共通エンベロープ `{ ok: true, data }` / `{ ok: false, error: { code, message, fields? } }`
 - ファイルは1つの責務に絞る。200〜400行を目安、800行を上限とする
+- フロントのサーバー状態は TanStack Query が持つ。楽観更新はせず、更新後に該当クエリを invalidate する。クエリキーは `apps/web/src/lib/queryKeys.ts` からのみ取る
+- react-router は v8。`react-router-dom` は使わず、すべて `react-router` から import する
+- 繰り返す行のボタン・ラベルには行を識別できる情報（行番号や当事者名）をアクセシブル名に入れる。全行が同じ名前だと読み上げでも自動テストでも区別できず、並べ替えや index 取り違えの不具合を検知できない
 
 ## サブエージェント
 
