@@ -1,5 +1,4 @@
-import { expect, test } from "@playwright/test";
-
+import { expect, test } from "./helpers/events.js";
 import { cardWith, rowWith } from "./helpers/locators.js";
 
 /**
@@ -9,7 +8,7 @@ import { cardWith, rowWith } from "./helpers/locators.js";
  * 山田 18000・川口 16700、合計 34700、一人あたり 17350。
  * 川口 → 山田 650 の1件になる。
  */
-test("単発品目別 — 支払者ごとに合算されることを確認する", async ({ page, request }) => {
+test("単発品目別 — 支払者ごとに合算されることを確認する", async ({ page, trackEvent }) => {
   await page.goto("/events/new");
 
   await page.getByRole("textbox", { name: "タイトル" }).fill("E2E 品目別");
@@ -39,6 +38,9 @@ test("単発品目別 — 支払者ごとに合算されることを確認する
   await page.getByRole("button", { name: "計算する" }).click();
 
   await expect(page).toHaveURL(/\/events\/[0-9a-f-]{36}$/);
+  // 後片付け。ホームの一覧に残さない。ここで id を登録しておけば、この先の
+  // assertion が落ちてもテスト終了時に必ず削除される（helpers/events.ts）。
+  trackEvent(page.url().split("/").pop() ?? "");
 
   // 品目別では、入力した「立て替え額」ではなく品目の合算が支払額になる。
   // ¥18,000 は「支払い状況」の 山田 の行と「品目」の 宿代 の行の両方に出るので、
@@ -51,7 +53,4 @@ test("単発品目別 — 支払者ごとに合算されることを確認する
   await expect(
     page.getByRole("button", { name: "1. 川口 から 山田 への ¥650を支払い済みにする" }),
   ).toBeVisible();
-
-  const eventId = page.url().split("/").pop();
-  expect((await request.delete(`/api/events/${eventId}`)).ok()).toBe(true);
 });

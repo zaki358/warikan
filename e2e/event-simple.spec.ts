@@ -1,5 +1,4 @@
-import { expect, test } from "@playwright/test";
-
+import { expect, test } from "./helpers/events.js";
 import { rowWith } from "./helpers/locators.js";
 
 /**
@@ -9,7 +8,7 @@ import { rowWith } from "./helpers/locators.js";
  * 田中 +5500 / 佐藤 -1000 / 鈴木 -4500 なので、
  * 鈴木 → 田中 4500、佐藤 → 田中 1000 の2件になる。
  */
-test("単発シンプル — 3人で割り勘して結果を確認する", async ({ page, request }) => {
+test("単発シンプル — 3人で割り勘して結果を確認する", async ({ page, trackEvent }) => {
   await page.goto("/events/new");
 
   await page.getByRole("textbox", { name: "タイトル" }).fill("E2E シンプル");
@@ -28,6 +27,10 @@ test("単発シンプル — 3人で割り勘して結果を確認する", async
   await page.getByRole("button", { name: "計算する" }).click();
 
   await expect(page).toHaveURL(/\/events\/[0-9a-f-]{36}$/);
+  // 後片付け。ホームの一覧に残さない。ここで id を登録しておけば、この先の
+  // assertion が落ちてもテスト終了時に必ず削除される（helpers/events.ts）。
+  trackEvent(page.url().split("/").pop() ?? "");
+
   await expect(page.getByRole("heading", { name: "E2E シンプル" })).toBeVisible();
 
   // ¥4,500 は「一人あたり」の行と「鈴木 → 田中」の送金行の両方に出る。
@@ -52,8 +55,4 @@ test("単発シンプル — 3人で割り勘して結果を確認する", async
   await expect(
     page.getByRole("button", { name: "1. 鈴木 から 田中 への ¥4,500を支払い済みにする" }),
   ).toBeVisible();
-
-  // 後片付け。ホームの一覧に残さない。
-  const eventId = page.url().split("/").pop();
-  expect((await request.delete(`/api/events/${eventId}`)).ok()).toBe(true);
 });
