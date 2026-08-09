@@ -9,6 +9,7 @@
  */
 export const queryKeys = {
   me: () => ["me"] as const,
+  users: () => ["users"] as const,
   categories: () => ["categories"] as const,
   monthly: (ym: string) => ["monthly", ym] as const,
   monthlyResult: (ym: string) => ["monthly", ym, "result"] as const,

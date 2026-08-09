@@ -10,6 +10,7 @@ import {
   useDeleteExpense,
   useMe,
   useMonthly,
+  useUsers,
 } from "../features/monthly/queries.js";
 import { formatYen } from "../lib/format.js";
 import { shiftYm, todayYm, ymLabel } from "../lib/ym.js";
@@ -19,24 +20,14 @@ export function MonthlyRecord() {
   const navigate = useNavigate();
 
   const me = useMe();
+  const users = useUsers();
   const categories = useCategories();
   const monthly = useMonthly(ym);
   const addExpense = useAddExpense(ym);
   const deleteExpense = useDeleteExpense(ym);
 
   const error =
-    me.error ?? categories.error ?? monthly.error ?? addExpense.error ?? deleteExpense.error;
-
-  // 支払者の候補は「自分」と「支出に現れたもう一人」から作る。
-  // 制約は Task 7 の注記および README の「既知の制約」を参照。
-  const users = me.data ? [{ userId: me.data.userId, displayName: me.data.displayName }] : [];
-  const known = new Set(users.map((user) => user.userId));
-  for (const expense of monthly.data?.expenses ?? []) {
-    if (!known.has(expense.paidBy)) {
-      known.add(expense.paidBy);
-      users.push({ userId: expense.paidBy, displayName: "パートナー" });
-    }
-  }
+    me.error ?? users.error ?? categories.error ?? monthly.error ?? addExpense.error ?? deleteExpense.error;
 
   const total = (monthly.data?.expenses ?? []).reduce((sum, expense) => sum + expense.amount, 0);
 
@@ -82,7 +73,7 @@ export function MonthlyRecord() {
       {me.data ? (
         <ExpenseForm
           ym={ym}
-          users={users}
+          users={users.data ?? []}
           categories={categories.data ?? []}
           defaultPaidBy={me.data.userId}
           isSubmitting={addExpense.isPending}
@@ -97,7 +88,7 @@ export function MonthlyRecord() {
       ) : (
         <ExpenseList
           expenses={monthly.data?.expenses ?? []}
-          users={users}
+          users={users.data ?? []}
           categories={categories.data ?? []}
           deletingId={deleteExpense.isPending ? (deleteExpense.variables ?? null) : null}
           onDelete={(id) => deleteExpense.mutate(id)}

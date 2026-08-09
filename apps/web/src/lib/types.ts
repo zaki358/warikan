@@ -4,6 +4,12 @@ export type Me = {
   displayName: string;
 };
 
+/** GET /api/users。email は返らない。 */
+export type UserSummary = {
+  userId: string;
+  displayName: string;
+};
+
 export type Category = {
   id: number;
   name: string;
