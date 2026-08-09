@@ -87,6 +87,7 @@ Plan 3 を書く時点で、実際にコードを読んで確認した。
 | `e2e/global-setup.ts` | 新規 | サーバ疎通の確認、テスト用データの初期化、ユーザー2人の担保 |
 | `e2e/helpers/db.ts` | 新規 | `wrangler d1 execute --local` の薄いラッパ |
 | `e2e/helpers/locators.ts` | 新規 | 行・カードを一意に絞るロケータ。同じ金額や名前が複数箇所に出るため |
+| `e2e/helpers/events.ts` | 新規 | 作った単発割り勘を、テストの成否に関わらず必ず消す fixture |
 | `e2e/monthly.spec.ts` | 新規 | フロー1（月次） |
 | `e2e/event-simple.spec.ts` | 新規 | フロー2（単発シンプル） |
 | `e2e/event-items.spec.ts` | 新規 | フロー3（単発品目別） |
@@ -1033,19 +1034,62 @@ git commit -m "test: Playwright の土台と月次の E2E を追加"
 ## Task 5: E2E フロー2・3（単発シンプル／品目別）
 
 **Files:**
-- Create: `e2e/event-simple.spec.ts`, `e2e/event-items.spec.ts`
+- Create: `e2e/helpers/events.ts`, `e2e/event-simple.spec.ts`, `e2e/event-items.spec.ts`
 
 **Interfaces:**
 - Consumes: Task 4 の `playwright.config.ts`（`baseURL` が効くので `page.goto` は相対パスで書く）、`e2e/helpers/locators.ts` の `rowWith(scope, label)` / `cardWith(page, heading)`
 - Produces: なし
 
-- [ ] **Step 1: フロー2を書く**
+- [ ] **Step 1: 後片付けの fixture を書く**
+
+`e2e/helpers/events.ts`:
+
+```ts
+import { test as base } from "@playwright/test";
+
+/**
+ * 単発割り勘（シンプル／品目別）の後片付け。
+ *
+ * spec の最後に `request.delete(...)` を1行書くだけだと、手前の assertion
+ * が失敗したときにその行へ到達せず、作ったイベントが D1 に残ってホームの
+ * 一覧にも出続けてしまう（実測済み：`apps/api/src/routes/events.ts` の
+ * 集計ロジックを一時的に壊して確認した）。テスト本文の成否に関係なく
+ * 必ず消えるよう、`test.extend` の fixture teardown（`use()` の後の行）に
+ * 片付けを寄せる。teardown はテストが FAIL しても必ず実行される。
+ *
+ * 呼び出し側は id が分かった時点で `trackEvent(id)` を呼ぶだけでよい。
+ * 実際の削除はテスト終了後にまとめて行われる。
+ */
+type Fixtures = {
+  trackEvent: (eventId: string) => void;
+};
+
+export const test = base.extend<Fixtures>({
+  trackEvent: async ({ request }, use) => {
+    const eventIds: string[] = [];
+
+    await use((eventId) => {
+      eventIds.push(eventId);
+    });
+
+    // ここから teardown。
+    for (const eventId of eventIds) {
+      await request.delete(`/api/events/${eventId}`);
+    }
+  },
+});
+
+export { expect } from "@playwright/test";
+```
+
+**`trackEvent` は id が分かった直後、他の assertion より前に呼ぶこと。** 全部の assertion のあとで呼ぶと、fixture にした意味が無くなる。
+
+- [ ] **Step 2: フロー2を書く**
 
 `e2e/event-simple.spec.ts`:
 
 ```ts
-import { expect, test } from "@playwright/test";
-
+import { expect, test } from "./helpers/events.js";
 import { rowWith } from "./helpers/locators.js";
 
 /**
@@ -1055,7 +1099,7 @@ import { rowWith } from "./helpers/locators.js";
  * 田中 +5500 / 佐藤 -1000 / 鈴木 -4500 なので、
  * 鈴木 → 田中 4500、佐藤 → 田中 1000 の2件になる。
  */
-test("単発シンプル — 3人で割り勘して結果を確認する", async ({ page, request }) => {
+test("単発シンプル — 3人で割り勘して結果を確認する", async ({ page, trackEvent }) => {
   await page.goto("/events/new");
 
   await page.getByRole("textbox", { name: "タイトル" }).fill("E2E シンプル");
@@ -1074,6 +1118,10 @@ test("単発シンプル — 3人で割り勘して結果を確認する", async
   await page.getByRole("button", { name: "計算する" }).click();
 
   await expect(page).toHaveURL(/\/events\/[0-9a-f-]{36}$/);
+  // 後片付け。ホームの一覧に残さない。ここで id を登録しておけば、この先の
+  // assertion が落ちてもテスト終了時に必ず削除される（helpers/events.ts）。
+  trackEvent(page.url().split("/").pop() ?? "");
+
   await expect(page.getByRole("heading", { name: "E2E シンプル" })).toBeVisible();
 
   // ¥4,500 は「一人あたり」の行と「鈴木 → 田中」の送金行の両方に出る。
@@ -1098,20 +1146,15 @@ test("単発シンプル — 3人で割り勘して結果を確認する", async
   await expect(
     page.getByRole("button", { name: "1. 鈴木 から 田中 への ¥4,500を支払い済みにする" }),
   ).toBeVisible();
-
-  // 後片付け。ホームの一覧に残さない。
-  const eventId = page.url().split("/").pop();
-  expect((await request.delete(`/api/events/${eventId}`)).ok()).toBe(true);
 });
 ```
 
-- [ ] **Step 2: フロー3を書く**
+- [ ] **Step 3: フロー3を書く**
 
 `e2e/event-items.spec.ts`:
 
 ```ts
-import { expect, test } from "@playwright/test";
-
+import { expect, test } from "./helpers/events.js";
 import { cardWith, rowWith } from "./helpers/locators.js";
 
 /**
@@ -1121,7 +1164,7 @@ import { cardWith, rowWith } from "./helpers/locators.js";
  * 山田 18000・川口 16700、合計 34700、一人あたり 17350。
  * 川口 → 山田 650 の1件になる。
  */
-test("単発品目別 — 支払者ごとに合算されることを確認する", async ({ page, request }) => {
+test("単発品目別 — 支払者ごとに合算されることを確認する", async ({ page, trackEvent }) => {
   await page.goto("/events/new");
 
   await page.getByRole("textbox", { name: "タイトル" }).fill("E2E 品目別");
@@ -1151,6 +1194,9 @@ test("単発品目別 — 支払者ごとに合算されることを確認する
   await page.getByRole("button", { name: "計算する" }).click();
 
   await expect(page).toHaveURL(/\/events\/[0-9a-f-]{36}$/);
+  // 後片付け。ホームの一覧に残さない。ここで id を登録しておけば、この先の
+  // assertion が落ちてもテスト終了時に必ず削除される（helpers/events.ts）。
+  trackEvent(page.url().split("/").pop() ?? "");
 
   // 品目別では、入力した「立て替え額」ではなく品目の合算が支払額になる。
   // ¥18,000 は「支払い状況」の 山田 の行と「品目」の 宿代 の行の両方に出るので、
@@ -1163,13 +1209,10 @@ test("単発品目別 — 支払者ごとに合算されることを確認する
   await expect(
     page.getByRole("button", { name: "1. 川口 から 山田 への ¥650を支払い済みにする" }),
   ).toBeVisible();
-
-  const eventId = page.url().split("/").pop();
-  expect((await request.delete(`/api/events/${eventId}`)).ok()).toBe(true);
 });
 ```
 
-- [ ] **Step 3: サーバを起動して3本とも実行する**
+- [ ] **Step 4: サーバを起動して3本とも実行する**
 
 ```bash
 npm run build -w @warikan/web
@@ -1183,13 +1226,13 @@ npm run test:e2e
 
 Expected: 4 passed（月次2本 + 単発2本）
 
-- [ ] **Step 4: 落ちる変更を入れて、E2E が本当に検知することを確かめる**
+- [ ] **Step 5: 落ちる変更を入れて、E2E が本当に検知することを確かめる**
 
 `apps/web/src/routes/EventDetail.tsx` の送金一覧で `detail.settlements` を `[...detail.settlements].reverse()` に一時的に変え、`npm run build -w @warikan/web` してから `npm run test:e2e` を実行する。
 
 Expected: `event-simple` が FAIL（行番号と当事者の組み合わせが入れ替わる）。確認できたら**必ず元に戻して再ビルドする**。
 
-- [ ] **Step 5: サーバを停止する**
+- [ ] **Step 6: サーバを停止する**
 
 Ctrl+C だけでは子の `workerd` が残り、親が生きていると再生成される。**別プロジェクト（`kakei-dashboard-3`）も同じ `workerd` 名で 8787 に常駐しているので、名前だけで一括終了しないこと。**
 
@@ -1207,7 +1250,7 @@ powershell -NoProfile -Command "$p = Get-CimInstance Win32_Process | Where-Objec
 
 最初の一覧コマンドをもう一度実行し、**0件になっていること**を確認する。
 
-- [ ] **Step 6: README に E2E の実行方法を書く**
+- [ ] **Step 7: README に E2E の実行方法を書く**
 
 `README.md` の「開発」節の末尾に追加:
 
@@ -1229,7 +1272,7 @@ npm run test:e2e
 ブラウザ本体が入っていなければ `npx playwright install chromium` を一度だけ実行する。E2E は `2099-01` をテスト専用の月として使い、実行のたびにその月だけを消す。実データには触れない。
 ```
 
-- [ ] **Step 7: 型チェックとコミット**
+- [ ] **Step 8: 型チェックとコミット**
 
 Run: `npm run typecheck`
 Expected: エラーなし
