@@ -2,26 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiGet, apiSend } from "../../lib/api.js";
 import { queryKeys } from "../../lib/queryKeys.js";
-import type {
-  Category,
-  Expense,
-  Me,
-  MonthlyDetail,
-  MonthlyResult,
-  Snapshot,
-  UserSummary,
-} from "../../lib/types.js";
-
-export const useMe = () =>
-  useQuery({ queryKey: queryKeys.me(), queryFn: () => apiGet<Me>("/api/me") });
-
-/** 登録済みユーザー。2人しか居らず、増えることも稀なので長めに寝かせる。 */
-export const useUsers = () =>
-  useQuery({
-    queryKey: queryKeys.users(),
-    queryFn: () => apiGet<UserSummary[]>("/api/users"),
-    staleTime: 5 * 60 * 1000,
-  });
+import type { Category, Expense, MonthlyDetail, MonthlyResult, Snapshot } from "../../lib/types.js";
 
 export const useCategories = () =>
   useQuery({

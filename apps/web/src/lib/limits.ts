@@ -5,3 +5,4 @@
  */
 export const MAX_AMOUNT = 10_000_000;
 export const MAX_ITEMS = 200;
+export const MAX_DISPLAY_NAME = 20;

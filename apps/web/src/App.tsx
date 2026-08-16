@@ -9,6 +9,7 @@ import { EventNew } from "./routes/EventNew.js";
 import { Home } from "./routes/Home.js";
 import { MonthlyRecord } from "./routes/MonthlyRecord.js";
 import { MonthlyResult } from "./routes/MonthlyResult.js";
+import { Settings } from "./routes/Settings.js";
 
 export function App() {
   // ウィザードの途中状態はここだけが持つ。
@@ -34,6 +35,7 @@ export function App() {
           }
         />
         <Route path="/events/:id" element={<EventDetail />} />
+        <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </div>

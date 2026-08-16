@@ -21,6 +21,11 @@ export function Home() {
       <div className="card">
         <h1>割り勘</h1>
         <p className="sub">夫婦2人の記録と、その場かぎりの割り勘。</p>
+        <div className="actions">
+          <Link className="btn btn-secondary" to="/settings">
+            ⚙️ 設定
+          </Link>
+        </div>
       </div>
 
       <div className="card">
