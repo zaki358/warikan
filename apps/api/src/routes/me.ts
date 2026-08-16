@@ -1,13 +1,9 @@
 import { Hono } from "hono";
-import { z } from "zod";
 
 import { updateDisplayName } from "../db/users.js";
 import type { AppEnv } from "../env.js";
+import { DISPLAY_NAME_ERROR, displayNameSchema } from "../lib/displayName.js";
 import { fail, ok } from "../lib/response.js";
-
-const patchSchema = z.object({
-  displayName: z.string().trim().min(1).max(20),
-});
 
 export const meRoutes = new Hono<AppEnv>();
 
@@ -17,9 +13,9 @@ meRoutes.get("/", (c) => {
 });
 
 meRoutes.patch("/", async (c) => {
-  const parsed = patchSchema.safeParse(await c.req.json().catch(() => null));
+  const parsed = displayNameSchema.safeParse(await c.req.json().catch(() => null));
   if (!parsed.success) {
-    return c.json(fail("VALIDATION_ERROR", "表示名は1〜20文字で入力してください", { displayName: "1〜20文字" }), 400);
+    return c.json(fail("VALIDATION_ERROR", DISPLAY_NAME_ERROR, { displayName: "1〜20文字" }), 400);
   }
 
   const user = c.get("user");
