@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import type { Snapshot } from "../../lib/types.js";
+import type { Snapshot, UserSummary } from "../../lib/types.js";
 import { ResultView } from "./ResultView.js";
 
 const snapshot: Snapshot = {
@@ -20,13 +20,21 @@ const snapshot: Snapshot = {
   settledAt: "2026-08-31T12:00:00.000Z",
 };
 
-const setup = (overrides: { snapshot?: Snapshot; isDirty?: boolean } = {}) => {
+// 既存のテストは名前の解決を見ないので、users をスナップショットと
+// 同じ名前にして「上書きしても変わらない」状態を既定にする。
+const users: UserSummary[] = [
+  { userId: "u1", displayName: "自分" },
+  { userId: "u2", displayName: "妻" },
+];
+
+const setup = (overrides: { snapshot?: Snapshot; users?: UserSummary[]; isDirty?: boolean } = {}) => {
   const onRecalculate = vi.fn();
   const onToggleTransfer = vi.fn();
 
   render(
     <ResultView
       snapshot={overrides.snapshot ?? snapshot}
+      users={overrides.users ?? users}
       isDirty={overrides.isDirty ?? false}
       isBusy={false}
       onRecalculate={onRecalculate}
@@ -131,5 +139,36 @@ describe("送金の index", () => {
     );
 
     expect(onToggleTransfer).toHaveBeenCalledWith(1, true);
+  });
+});
+
+describe("改名後の名前解決", () => {
+  // スナップショットは計算時点の表示名を JSON に焼き込んでいる（settle.ts）。
+  // 改名後にこの画面を開いたとき、支払い状況と精算行の両方が
+  // 「現在」の表示名で出ることを固定する。旧名が残ると混乱のもと。
+  it("スナップショットが旧名でも、現在の users の名前で出す", () => {
+    const renamed: UserSummary[] = [
+      { userId: "u1", displayName: "太郎" },
+      { userId: "u2", displayName: "花子" },
+    ];
+    setup({ users: renamed });
+
+    // 支払い状況
+    expect(screen.getByText("太郎")).toBeInTheDocument();
+    expect(screen.getByText("花子")).toBeInTheDocument();
+    expect(screen.queryByText("自分")).not.toBeInTheDocument();
+    expect(screen.queryByText("妻")).not.toBeInTheDocument();
+
+    // 精算行
+    expect(screen.getByText(/花子 → 太郎/)).toBeInTheDocument();
+  });
+
+  it("users に居ないユーザーはスナップショットの名前にフォールバックする", () => {
+    // u2（送金元）が users に居ない状況。「?」にならず旧名のまま出ること。
+    setup({ users: [{ userId: "u1", displayName: "太郎" }] });
+
+    expect(screen.getByText("太郎")).toBeInTheDocument();
+    expect(screen.getByText("妻")).toBeInTheDocument();
+    expect(screen.getByText(/妻 → 太郎/)).toBeInTheDocument();
   });
 });

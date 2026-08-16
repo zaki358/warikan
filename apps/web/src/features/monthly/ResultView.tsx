@@ -1,17 +1,25 @@
 import { Button } from "../../components/Button.js";
 import { formatYen, percent } from "../../lib/format.js";
-import type { Snapshot } from "../../lib/types.js";
+import type { Snapshot, UserSummary } from "../../lib/types.js";
 
 type Props = {
   snapshot: Snapshot;
+  users: UserSummary[];
   isDirty: boolean;
   isBusy: boolean;
   onRecalculate: () => void;
   onToggleTransfer: (index: number, isPaid: boolean) => void;
 };
 
-export function ResultView({ snapshot, isDirty, isBusy, onRecalculate, onToggleTransfer }: Props) {
-  const nameByUser = new Map(snapshot.byUser.map((entry) => [entry.userId, entry.displayName]));
+export function ResultView({ snapshot, users, isDirty, isBusy, onRecalculate, onToggleTransfer }: Props) {
+  // スナップショットは計算した時点の表示名を保存している（改名前の記録として
+  // 正しい）。改名後に古い名前のまま残らないよう、現在の users を後ろから
+  // 重ねて上書きする。users に居ない相手（退会など）はスナップショットの
+  // 名前にフォールバックする。
+  const nameByUser = new Map<string, string>([
+    ...snapshot.byUser.map((entry) => [entry.userId, entry.displayName] as const),
+    ...users.map((user) => [user.userId, user.displayName] as const),
+  ]);
 
   return (
     <>
@@ -56,7 +64,7 @@ export function ResultView({ snapshot, isDirty, isBusy, onRecalculate, onToggleT
         <h2>支払い状況</h2>
         {snapshot.byUser.map((entry) => (
           <div className="list-row" key={entry.userId}>
-            <div className="grow ellipsis">{entry.displayName}</div>
+            <div className="grow ellipsis">{nameByUser.get(entry.userId) ?? entry.displayName}</div>
             <div className="amount">{formatYen(entry.paid)}</div>
           </div>
         ))}

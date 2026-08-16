@@ -4,6 +4,7 @@ import { Button } from "../components/Button.js";
 import { ErrorBanner } from "../components/ErrorBanner.js";
 import { ResultView } from "../features/monthly/ResultView.js";
 import { useMonthlyResult, useSettle, useToggleTransfer } from "../features/monthly/queries.js";
+import { useUsers } from "../features/users/queries.js";
 import { ApiError } from "../lib/api.js";
 import { todayYm, ymLabel } from "../lib/ym.js";
 
@@ -11,6 +12,7 @@ export function MonthlyResult() {
   const { ym = todayYm() } = useParams();
 
   const result = useMonthlyResult(ym);
+  const users = useUsers();
   const settle = useSettle(ym);
   const toggleTransfer = useToggleTransfer(ym);
 
@@ -33,7 +35,7 @@ export function MonthlyResult() {
       </div>
 
       {notCalculated ? null : (
-        <ErrorBanner error={result.error ?? settle.error ?? toggleTransfer.error} />
+        <ErrorBanner error={result.error ?? users.error ?? settle.error ?? toggleTransfer.error} />
       )}
 
       {result.isLoading ? (
@@ -51,6 +53,7 @@ export function MonthlyResult() {
       {result.data ? (
         <ResultView
           snapshot={result.data.snapshot}
+          users={users.data ?? []}
           isDirty={result.data.isDirty}
           isBusy={isBusy}
           onRecalculate={() => settle.mutate(undefined)}
