@@ -36,7 +36,7 @@
 
 | 項目 | 値 |
 |---|---|
-| Cloudflare アカウント | `aa72c68ee5b2decdafd78ebda2da8206`（t.yamazaki.1129@gmail.com） |
+| Cloudflare アカウント | 確認済み（アカウント ID とメールはリポジトリに書かない。`wrangler whoami` で確認する） |
 | workers.dev サブドメイン | `y-kakeibo` |
 | ゾーン（管理ドメイン） | 0件 |
 | 既存 Worker | `kakei-dashboard`（bindings: `ACCESS_ALLOWED_EMAILS` secret, `DB` d1） |

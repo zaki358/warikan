@@ -1433,19 +1433,24 @@ LOW の扱い:
 ```
 Cloudflare ダッシュボードで次を行ってください。
 
-1. Zero Trust → Access → Applications → Add an application → Self-hosted
-2. Application name: warikan
+1. Zero Trust → Access → Applications → Add an application
+2. destination の種別で **Workers** を選ぶ
+   workers.dev の URL は Public DNS では選べない（Public DNS は
+   アカウントにゾーンとして登録されたドメインしか候補に出ないが、
+   workers.dev はゾーンではないため）。
+3. Application name: warikan
    Session Duration: 任意（1 week 程度）
-   Public hostname: warikan.y-kakeibo.workers.dev
-3. Policy を1つ作る
+   対象の Worker: warikan
+4. Policy を1つ作る
    Policy name: allowed-two
    Action: Allow
    Include: Emails → ご自身とパートナーのメールアドレス2件
-4. 作成後、Application の Overview に出る **Application Audience (AUD) Tag** を控える
-5. Zero Trust のチーム名（<team>.cloudflareaccess.com の <team> 部分）を控える
+5. 作成後、Application の設定に出る **Application Audience (AUD) Tag** を控える
+6. Zero Trust のチーム名（<team>.cloudflareaccess.com の <team> 部分）を控える
 
-控えた2つは次のステップで使います。**AUD Tag はここに貼らず**、
-ご自身の手元で wrangler secret に入れてください。
+控えた2つは次のステップで使います。AUD Tag はログイン画面への
+リダイレクト URL に平文で載るので秘密ではないが、リポジトリに
+残さないため wrangler secret に入れる。
 ```
 
 - [ ] **Step 2: `ACCESS_TEAM_DOMAIN` を `wrangler.jsonc` に書く**
