@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
+import { MAX_DISPLAY_NAME } from "../src/lib/displayName.js";
 import { ALLOWED_EMAIL, authedFetch, jsonBody, jsonInit, resetDb } from "./helpers.js";
 
 type MeData = { userId: string; email: string; displayName: string };
@@ -51,5 +52,26 @@ describe("PATCH /api/me", () => {
     const res = await authedFetch("/api/me", jsonInit("PATCH", { displayName: "あ".repeat(21) }));
 
     expect(res.status).toBe(400);
+  });
+
+  it("見えない文字を落として保存する", async () => {
+    // スキーマは PATCH /api/users/:id と共有している。片方の口だけ
+    // 素通りすることが無いよう、両方で同じ挙動を固定する。
+    await authedFetch("/api/me");
+
+    const zwsp = String.fromCharCode(0x200b);
+    const res = await authedFetch("/api/me", jsonInit("PATCH", { displayName: `${zwsp}僕${zwsp}` }));
+    const body = await jsonBody<Envelope<MeData>>(res);
+
+    expect(res.status).toBe(200);
+    expect(body.data?.displayName).toBe("僕");
+  });
+
+  it("400 の fields は上限の定数から作られている", async () => {
+    // ここをベタ書きにすると MAX_DISPLAY_NAME を変えたとき黙ってズレる。
+    const res = await authedFetch("/api/me", jsonInit("PATCH", { displayName: "" }));
+    const body = await jsonBody<Envelope<MeData>>(res);
+
+    expect(body.error?.fields?.displayName).toBe(`1〜${MAX_DISPLAY_NAME}文字`);
   });
 });

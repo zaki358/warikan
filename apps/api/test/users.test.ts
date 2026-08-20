@@ -16,6 +16,12 @@ type Envelope<T> = { ok: boolean; data?: T; error?: { code: string } };
 /** 認証を1回通すと、その email の users 行が無ければ作られる（middleware/auth.ts）。 */
 const signIn = (email: string) => authedFetch("/api/me", {}, email);
 
+// 見えない文字。ソースに生で置くと読めず、grep も効かないのでコードポイントから作る。
+/** RLO: 以降の文字列を右から左へ表示させる（表示の入れ替えに使える）。 */
+const RLO = String.fromCharCode(0x202e);
+/** ゼロ幅スペース。貼り付けたテキストに紛れ込みやすい。 */
+const ZWSP = String.fromCharCode(0x200b);
+
 /** 一覧から表示名で1人引く。id は乱数なのでテスト側で決め打ちできない。 */
 const findByName = async (displayName: string): Promise<UserSummary> => {
   const body = await jsonBody<Envelope<UserSummary[]>>(await authedFetch("/api/users"));
@@ -96,6 +102,24 @@ describe("PATCH /api/users/:id", () => {
     expect(after.data?.map((user) => user.displayName).sort()).toEqual(["me", "つれあい"]);
   });
 
+  it("自分自身の id でも表示名を変更できる", async () => {
+    // 設定画面は自分の行も PATCH /api/me ではなくこの口を使う。
+    // 相手と経路は同じだが、実際に使われる側が通ることを固定しておく。
+    const me = await findByName("me");
+
+    const res = await authedFetch(
+      `/api/users/${me.userId}`,
+      jsonInit("PATCH", { displayName: "わたし" }),
+    );
+    const body = await jsonBody<Envelope<UserSummary>>(res);
+
+    expect(res.status).toBe(200);
+    expect(body.data).toEqual({ userId: me.userId, displayName: "わたし" });
+
+    const after = await jsonBody<Envelope<UserSummary[]>>(await authedFetch("/api/users"));
+    expect(after.data?.map((user) => user.displayName).sort()).toEqual(["partner", "わたし"]);
+  });
+
   it("前後の空白を落として保存する", async () => {
     const partner = await findByName("partner");
 
@@ -103,6 +127,33 @@ describe("PATCH /api/users/:id", () => {
 
     const found = await findByName("妻");
     expect(found.userId).toBe(partner.userId);
+  });
+
+  it("ゼロ幅文字・双方向制御文字を落として保存する", async () => {
+    // trim() は空白しか落とさない。貼り付けたテキストに紛れた見えない文字が
+    // そのまま入ると、名前が壊れて見えたり読み上げが狂ったりする。
+    const partner = await findByName("partner");
+
+    await authedFetch(
+      `/api/users/${partner.userId}`,
+      jsonInit("PATCH", { displayName: `${RLO}妻${ZWSP}` }),
+    );
+
+    const found = await findByName("妻");
+    expect(found.userId).toBe(partner.userId);
+  });
+
+  it("見えない文字だけの表示名は 400", async () => {
+    const partner = await findByName("partner");
+
+    const res = await authedFetch(
+      `/api/users/${partner.userId}`,
+      jsonInit("PATCH", { displayName: ZWSP + ZWSP }),
+    );
+    const body = await jsonBody<Envelope<UserSummary>>(res);
+
+    expect(res.status).toBe(400);
+    expect(body.error?.code).toBe("VALIDATION_ERROR");
   });
 
   it("空白だけの表示名は 400", async () => {
