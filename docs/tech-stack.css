@@ -1,0 +1,416 @@
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --surface-alt: #f0f2f5;
+  --border: #dfe3e8;
+  --text: #1c2128;
+  --text-muted: #5b6572;
+  --accent: #2d6cdf;
+  --accent-soft: #e8f0fe;
+  --shared: #6f42c1;
+  --api: #1f883d;
+  --web: #d1741f;
+  --tool: #5b6572;
+  --radius: 10px;
+  --mono: ui-monospace, "SFMono-Regular", "Cascadia Mono", "Consolas", monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14171c;
+    --surface: #1b1f26;
+    --surface-alt: #23282f;
+    --border: #2f353d;
+    --text: #e6e9ee;
+    --text-muted: #a2acb9;
+    --accent: #7aa7f0;
+    --accent-soft: #22304a;
+    --shared: #b48bee;
+    --api: #4fbf6d;
+    --web: #eda352;
+    --tool: #a2acb9;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Hiragino Sans", "Yu Gothic UI", "Meiryo", system-ui, sans-serif;
+  line-height: 1.75;
+  font-size: 15px;
+}
+
+.wrap {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 32px 20px 96px;
+}
+
+header.hero {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 24px;
+  margin-bottom: 8px;
+}
+
+header.hero h1 {
+  font-size: 1.9rem;
+  margin: 0 0 8px;
+  letter-spacing: 0.01em;
+}
+
+header.hero p {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+
+section {
+  margin-top: 48px;
+}
+
+h2 {
+  font-size: 1.25rem;
+  margin: 0 0 4px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--accent);
+  display: inline-block;
+}
+
+h3 {
+  font-size: 1.02rem;
+  margin: 28px 0 8px;
+}
+
+p.lead {
+  color: var(--text-muted);
+  margin-top: 12px;
+}
+
+.grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  margin-top: 20px;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+}
+
+.card h3 {
+  margin: 0 0 4px;
+  font-size: 1rem;
+}
+
+.card .path {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  display: block;
+  margin-bottom: 10px;
+}
+
+.card p {
+  margin: 0 0 10px;
+  font-size: 0.9rem;
+}
+
+.card ul {
+  margin: 0;
+  padding-left: 1.1em;
+  font-size: 0.87rem;
+  color: var(--text-muted);
+}
+
+.card li {
+  margin-bottom: 3px;
+}
+
+.card.shared { border-top: 3px solid var(--shared); }
+.card.api { border-top: 3px solid var(--api); }
+.card.web { border-top: 3px solid var(--web); }
+.card.tool { border-top: 3px solid var(--tool); }
+
+.table-scroll {
+  overflow-x: auto;
+  margin-top: 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 560px;
+  font-size: 0.88rem;
+}
+
+th, td {
+  text-align: left;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+thead th {
+  background: var(--surface-alt);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+tbody tr:last-child td {
+  border-bottom: none;
+}
+
+code {
+  font-family: var(--mono);
+  font-size: 0.86em;
+  background: var(--surface-alt);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+pre {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  overflow-x: auto;
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+  font-size: inherit;
+}
+
+/* ツリー内の装飾: .d = ディレクトリ, .gen = gitignore 対象の生成物 */
+pre .d {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+pre .gen {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.lead .gen,
+p .gen {
+  color: var(--text-muted);
+  font-style: italic;
+  font-family: var(--mono);
+  font-size: 0.9em;
+}
+
+.method {
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 0.76rem;
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: #fff;
+  display: inline-block;
+  min-width: 52px;
+  text-align: center;
+}
+
+.method.get { background: #1f6feb; }
+.method.post { background: #1f883d; }
+.method.patch { background: #bf8700; }
+.method.delete { background: #cf222e; }
+
+.note {
+  margin-top: 20px;
+  border-left: 4px solid var(--accent);
+  background: var(--accent-soft);
+  padding: 12px 16px;
+  border-radius: 0 var(--radius) var(--radius) 0;
+  font-size: 0.88rem;
+}
+
+.note strong {
+  display: block;
+  margin-bottom: 2px;
+}
+
+footer {
+  margin-top: 64px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+@media (max-width: 600px) {
+  body { font-size: 14px; }
+  .wrap { padding: 20px 14px 64px; }
+  header.hero h1 { font-size: 1.5rem; }
+}
+
+/* ============================================================
+   program-flow.html 用（tech-stack.html では未使用）
+   ============================================================ */
+
+.subnav {
+  margin-top: 20px;
+  font-size: 0.88rem;
+}
+
+.subnav a {
+  color: var(--accent);
+}
+
+.toc {
+  margin-top: 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+}
+
+.toc ol {
+  margin: 0;
+  padding-left: 1.4em;
+  font-size: 0.9rem;
+}
+
+.toc li {
+  margin-bottom: 2px;
+}
+
+.toc a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.toc a:hover {
+  text-decoration: underline;
+}
+
+/* 実行主体を示すピル。どこで動いているコードなのかを一目で分ける */
+.who {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  white-space: nowrap;
+  vertical-align: 1px;
+}
+
+.who.browser { color: var(--web); }
+.who.access  { color: #cf222e; }
+.who.worker  { color: var(--api); }
+.who.shared  { color: var(--shared); }
+.who.db      { color: var(--accent); }
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+  font-size: 0.84rem;
+  color: var(--text-muted);
+}
+
+/* 番号付きの実行ステップ */
+ol.flow {
+  list-style: none;
+  counter-reset: flow;
+  margin: 20px 0 0;
+  padding: 0;
+}
+
+ol.flow > li {
+  counter-increment: flow;
+  position: relative;
+  padding: 0 0 18px 44px;
+  border-left: 2px solid var(--border);
+  margin-left: 13px;
+}
+
+ol.flow > li:last-child {
+  border-left-color: transparent;
+  padding-bottom: 0;
+}
+
+ol.flow > li::before {
+  content: counter(flow);
+  position: absolute;
+  left: -14px;
+  top: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+}
+
+ol.flow .title {
+  font-weight: 600;
+  display: block;
+  margin-bottom: 2px;
+}
+
+ol.flow .body {
+  font-size: 0.89rem;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+ol.flow .body code {
+  color: var(--text);
+}
+
+ol.flow pre {
+  margin: 8px 0 0;
+  font-size: 0.78rem;
+}
+
+/* 章のあいだに置く一言 */
+.kicker {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  margin-top: 4px;
+}

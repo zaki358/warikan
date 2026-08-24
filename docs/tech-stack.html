@@ -1,0 +1,583 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>割り勘アプリ 技術構成</title>
+<link rel="stylesheet" href="tech-stack.css">
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>割り勘 (warikan) — 技術構成ドキュメント</h1>
+  <p>夫婦2人で使う割り勘アプリ。Cloudflare Workers 上で API と SPA を1つの Worker から配信する、npm workspaces のモノレポ。</p>
+  <div class="badges">
+    <span class="badge">TypeScript 7</span>
+    <span class="badge">Node.js 24 / npm 11</span>
+    <span class="badge">Hono 4</span>
+    <span class="badge">React 19</span>
+    <span class="badge">Vite 8</span>
+    <span class="badge">Cloudflare Workers + D1</span>
+    <span class="badge">SQL (SQLite方言)</span>
+  </div>
+  <p class="subnav">
+    姉妹編: <a href="program-flow.html">プログラムの動作順番</a> — 起動から画面表示、入力から精算までを順を追って説明した文書。
+  </p>
+</header>
+
+<section>
+  <h2>1. 使用している言語</h2>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr><th>言語</th><th>使用箇所</th><th>備考</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>TypeScript</strong></td>
+          <td>アプリケーションコードのすべて（99ファイル）</td>
+          <td><code>strict</code> + <code>noUncheckedIndexedAccess</code> + <code>verbatimModuleSyntax</code>。ES2022 / ESM。ビルドは各ツールが行い <code>tsc</code> は型検査専用（<code>noEmit</code>）</td>
+        </tr>
+        <tr>
+          <td><strong>TSX (JSX)</strong></td>
+          <td><code>apps/web</code> の React コンポーネント</td>
+          <td>React 19 の自動 JSX ランタイム</td>
+        </tr>
+        <tr>
+          <td><strong>SQL</strong></td>
+          <td><code>apps/api/migrations/*.sql</code> と D1 クエリ</td>
+          <td>SQLite 方言。金額カラムはすべて <code>INTEGER</code>（円）</td>
+        </tr>
+        <tr>
+          <td><strong>CSS</strong></td>
+          <td><code>apps/web/src/styles.css</code></td>
+          <td>素の CSS 1枚。CSS フレームワークは不使用</td>
+        </tr>
+        <tr>
+          <td><strong>HTML</strong></td>
+          <td><code>apps/web/index.html</code></td>
+          <td>Vite のエントリ。SPA のマウント先 <code>#root</code> のみ</td>
+        </tr>
+        <tr>
+          <td><strong>JSONC</strong></td>
+          <td><code>apps/api/wrangler.jsonc</code></td>
+          <td>コメント付き JSON。Worker の設定</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="note">
+    <strong>Python (Flask) は現在使っていない</strong>
+    元は Flask 実装だったが移行完了に伴い削除済み。<code>docs/app-analysis.md</code> に旧実装の解析記録だけが残る。
+  </div>
+</section>
+
+<section>
+  <h2>2. フォルダ構成</h2>
+  <p class="lead">
+    npm workspaces で 4 パッケージ。依存の向きは <code>shared → api / web</code> の一方向のみで、
+    <code>shared</code> は DB にも HTTP にも依存しない。
+    <span class="gen">この色の項目</span>は <code>.gitignore</code> 対象（生成物・ローカル設定）。
+  </p>
+
+  <h3>2-1. ルート</h3>
+<pre><code>warikan/
+├── <span class="d">apps/</span>                     アプリケーション本体（workspaces）
+│   ├── <span class="d">api/</span>                  @warikan/api   Hono + Cloudflare Workers + D1
+│   └── <span class="d">web/</span>                  @warikan/web   React + Vite の SPA
+├── <span class="d">packages/</span>
+│   └── <span class="d">shared/</span>               @warikan/shared 精算ロジック（純関数）と共通型
+├── <span class="d">e2e/</span>                      @warikan/e2e   Playwright の E2E テスト
+├── <span class="d">docs/</span>                     設計書・実装計画・解析記録・本ドキュメント
+├── <span class="d">.claude/</span>                  プロジェクト固有のサブエージェント定義
+├── .mcp.json                Playwright MCP サーバーの宣言
+├── CLAUDE.md                Claude Code 向けの開発ガイド（規約の一次情報）
+├── README.md
+├── package.json             workspaces 定義と横断スクリプト（test / typecheck）
+├── package-lock.json        全ワークスペースの依存を1ファイルで固定
+├── tsconfig.base.json       全パッケージが継承する共通 TS 設定
+├── .gitignore
+├── <span class="gen">node_modules/</span>            npm workspaces のホイスト先（ルートに集約）
+├── <span class="gen">.wrangler/</span>               ローカル D1 の実体と Worker のキャッシュ
+├── <span class="gen">.playwright-mcp/</span>         サブエージェントが吐くスナップショット・画像
+└── <span class="d">.superpowers/</span>            ワークフロー支援用の作業ディレクトリ</code></pre>
+
+  <div class="note">
+    <strong>ワークスペースは4つだが、パッケージのルートは3階層に散っている</strong>
+    <code>package.json</code> の <code>workspaces</code> は <code>["packages/*", "apps/*", "e2e"]</code>。
+    <code>e2e</code> だけがルート直下にあるのは、アプリでもライブラリでもなく「起動済みのアプリを外から叩くもの」だから。
+  </div>
+
+  <h3>2-2. 各パッケージの責務</h3>
+
+  <div class="grid">
+    <div class="card shared">
+      <h3>@warikan/shared</h3>
+      <span class="path">packages/shared/src/</span>
+      <p>DB にも HTTP にも依存しない純粋な計算層。API と Web の両方から import される。</p>
+      <ul>
+        <li><code>settlement.ts</code> — 精算アルゴリズム本体。<code>computeShares()</code> が負担額と端数配分、<code>calculateSettlement()</code> が貪欲マッチングで送金リストを作る</li>
+        <li><code>compareStr()</code> — ロケール非依存のコードユニット比較。<code>localeCompare</code> は環境の ICU 差で端数配分先がぶれるため不使用</li>
+        <li><code>types.ts</code> — <code>Participant</code> / <code>Share</code> / <code>Transfer</code> / <code>SettlementResult</code></li>
+        <li><code>index.ts</code> — 公開 API の再エクスポート</li>
+      </ul>
+    </div>
+
+    <div class="card api">
+      <h3>@warikan/api</h3>
+      <span class="path">apps/api/src/</span>
+      <p>Hono のルータ。Cloudflare Workers 上で動き、<code>/api/*</code> を処理して残りは静的 SPA に委ねる。</p>
+      <ul>
+        <li><code>index.ts</code> — エントリ。ミドルウェア登録とルータのマウント</li>
+        <li><code>middleware/auth.ts</code> — Cloudflare Access の JWT を JWKS で検証</li>
+        <li><code>middleware/errors.ts</code> — 例外を共通エラーエンベロープへ変換</li>
+        <li><code>routes/</code> — <code>me</code> / <code>users</code> / <code>categories</code> / <code>monthly</code> / <code>events</code></li>
+        <li><code>db/</code> — D1 アクセス層（<code>users</code> / <code>events</code> / <code>monthly</code> / <code>categories</code> / <code>rows</code>）</li>
+        <li><code>services/settle.ts</code> — 月次の精算スナップショット生成。shared の計算結果に表示名やカテゴリ内訳を合成</li>
+        <li><code>lib/</code> — <code>response</code>（エンベロープ）/ <code>ids</code> / <code>ym</code> / <code>displayName</code></li>
+        <li><code>env.ts</code> — Bindings と <code>c.var.user</code> の型定義</li>
+        <li><code>migrations/</code> — D1 のスキーマとカテゴリ初期データ</li>
+      </ul>
+    </div>
+
+    <div class="card web">
+      <h3>@warikan/web</h3>
+      <span class="path">apps/web/src/</span>
+      <p>React 19 の SPA。ビルド成果物 <code>dist/</code> を Worker の assets が配信する。</p>
+      <ul>
+        <li><code>main.tsx</code> — <code>QueryClientProvider</code> と <code>BrowserRouter</code> を張るブートストラップ</li>
+        <li><code>App.tsx</code> — ルート定義。イベント作成ウィザードの状態を <code>useReducer</code> で保持（旧実装の Cookie 依存を排除）</li>
+        <li><code>routes/</code> — <code>Home</code> / <code>MonthlyRecord</code> / <code>MonthlyResult</code> / <code>EventNew</code> / <code>EventInput</code> / <code>EventDetail</code> / <code>Settings</code></li>
+        <li><code>features/</code> — 機能単位の UI と TanStack Query の <code>queries.ts</code>（events / monthly / users）</li>
+        <li><code>components/</code> — <code>AmountInput</code> / <code>Button</code> / <code>Card</code> / <code>ErrorBanner</code> / <code>Toggle</code></li>
+        <li><code>lib/</code> — <code>api</code>（fetch ラッパ）/ <code>queryKeys</code>（キーの唯一の出所）/ <code>format</code> / <code>ym</code> / <code>limits</code> / <code>types</code></li>
+      </ul>
+    </div>
+
+    <div class="card tool">
+      <h3>@warikan/e2e</h3>
+      <span class="path">e2e/</span>
+      <p>Playwright のシナリオテスト。起動済みの <code>wrangler dev</code>（ポート 8788）に対して実行する。</p>
+      <ul>
+        <li><code>event-simple.spec.ts</code> / <code>event-items.spec.ts</code> / <code>monthly.spec.ts</code></li>
+        <li><code>helpers/</code> — DB リセット、イベント生成、ロケータ</li>
+        <li><code>global-setup.ts</code> — 実行前の初期化</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>2-3. packages/shared — 精算ロジック</h3>
+<pre><code>packages/shared/
+├── package.json             exports は "." → ./src/index.ts のみ（ビルド無しで直接参照）
+├── tsconfig.json
+├── vitest.config.ts
+└── <span class="d">src/</span>
+    ├── index.ts             公開 API の再エクスポート（この層の唯一の入口）
+    ├── settlement.ts        computeShares / calculateSettlement / compareStr
+    ├── types.ts             Participant / Share / Transfer / SharesResult / SettlementResult
+    ├── settlement.test.ts             代表ケースの単体テスト
+    ├── settlement.properties.test.ts  fast-check による不変条件テスト
+    ├── settlement.parity.test.ts      旧 Flask 実装との出力一致テスト
+    ├── smoke.test.ts
+    └── <span class="d">__fixtures__/</span>
+        └── flask-parity.json          旧実装の入出力を固定したフィクスチャ</code></pre>
+  <p class="lead">
+    ビルド成果物を持たず、<code>src/index.ts</code> を api と web が直接 import する。
+    そのため <code>D1Database</code> や <code>Request</code> といったランタイム固有の型を一切参照できず、純関数であることが構造的に保証される。
+  </p>
+
+  <h3>2-4. apps/api — Hono の API</h3>
+<pre><code>apps/api/
+├── package.json
+├── tsconfig.json
+├── vitest.config.ts         @cloudflare/vitest-pool-workers を指定（workerd 上で実行）
+├── wrangler.jsonc           Worker 名・D1 バインディング・assets の振り分け
+├── .dev.vars.example        ローカル用の環境変数のひな形（実体 .dev.vars は gitignore）
+├── <span class="gen">worker-configuration.d.ts</span> wrangler が生成する型定義
+├── <span class="d">migrations/</span>              wrangler d1 migrations apply が順に適用
+│   ├── 0001_init.sql        全8テーブルとインデックス
+│   └── 0002_categories.sql  カテゴリ初期データ7件
+├── <span class="d">src/</span>
+│   ├── index.ts             エントリ。onError → /api/health → accessAuth → 各ルータ → notFound
+│   ├── env.ts               Bindings（DB, ACCESS_*）と c.var.user の型
+│   ├── <span class="d">middleware/</span>          全リクエスト共通の前後処理
+│   │   ├── auth.ts          Cf-Access-Jwt-Assertion を JWKS 検証し users 行を解決
+│   │   └── errors.ts        例外を { ok:false, error } へ変換
+│   ├── <span class="d">routes/</span>              HTTP の入出力とバリデーション（zod）だけを持つ層
+│   │   ├── me.ts            GET/PATCH /api/me
+│   │   ├── users.ts         GET /api/users, PATCH /api/users/:id
+│   │   ├── categories.ts    GET /api/categories
+│   │   ├── monthly.ts       月次の期間・支出・締め・結果（8本）
+│   │   └── events.ts        単発イベントの CRUD と送金フラグ（5本）
+│   ├── <span class="d">db/</span>                  D1 への SQL を閉じ込める層。routes は SQL を書かない
+│   │   ├── rows.ts          テーブル行の型（*Row）。DB スキーマとの唯一の接点
+│   │   ├── users.ts         findUserByEmail / createUser / listUsers / 表示名更新
+│   │   ├── categories.ts    listActiveCategories
+│   │   ├── monthly.ts       期間と支出の読み書き。原子性が要る箇所は DB.batch()
+│   │   └── events.ts        イベント・メンバー・品目・送金の読み書き
+│   ├── <span class="d">services/</span>            db と shared をまたぐ業務ロジック
+│   │   └── settle.ts        buildSnapshot(): 精算結果に表示名とカテゴリ内訳を合成
+│   └── <span class="d">lib/</span>                 依存を持たない小物
+│       ├── response.ts      ok() / fail() — 共通エンベロープの生成
+│       ├── ids.ts           ID 採番と nowIso()
+│       ├── ym.ts            "2026-08" ↔ { year, month } の相互変換と検証
+│       └── displayName.ts   表示名の正規化・バリデーション
+└── <span class="d">test/</span>                    workerd 上で実際の D1 を使う統合テスト
+    ├── apply-migrations.ts  テスト前に migrations/ を流し込む
+    ├── helpers.ts           認証済みリクエストの生成など
+    ├── env.d.ts             テスト用 Bindings の型
+    ├── auth.test.ts / errors.test.ts / health.test.ts
+    ├── me.test.ts / users.test.ts / categories.test.ts / events.test.ts
+    └── monthly-period.test.ts / monthly-expense.test.ts / monthly-settle.test.ts</code></pre>
+  <p class="lead">
+    層は <strong>routes → services → db</strong> の一方向。<code>routes</code> は SQL を書かず、<code>db</code> は HTTP を知らない。
+    <code>services</code> はこの2つと <code>shared</code> をまたぐ場合にだけ置く（現状 <code>settle.ts</code> の1本）。
+  </p>
+
+  <h3>2-5. apps/web — React の SPA</h3>
+<pre><code>apps/web/
+├── index.html               Vite のエントリ。#root と main.tsx の読み込みのみ
+├── package.json
+├── tsconfig.json
+├── vite.config.ts           outDir=dist / dev の /api を localhost:8787 へプロキシ
+├── vitest.config.ts         jsdom 環境、test-setup.ts を読み込む
+├── <span class="gen">dist/</span>                    ビルド成果物。Worker の assets がこれを配信する
+└── <span class="d">src/</span>
+    ├── main.tsx             QueryClientProvider + BrowserRouter + StrictMode
+    ├── App.tsx              ルート定義とウィザード状態（useReducer）
+    ├── styles.css           全画面のスタイル（.container の max-width: 480px など）
+    ├── test-setup.ts        @testing-library/jest-dom の登録
+    ├── smoke.test.tsx
+    ├── <span class="d">routes/</span>              1画面 = 1ファイル。隣に .test.tsx を置く
+    │   ├── Home.tsx                 トップ。月次への導線とイベント履歴
+    │   ├── MonthlyRecord.tsx        月次の支出記録（/monthly/:ym）
+    │   ├── MonthlyResult.tsx        月次の精算結果（/monthly/:ym/result）
+    │   ├── EventNew.tsx             イベント作成ウィザード 1画面目（モード選択）
+    │   ├── EventInput.tsx           同 2画面目（金額入力）
+    │   ├── EventDetail.tsx          イベント詳細と送金チェック
+    │   └── Settings.tsx             表示名の編集
+    ├── <span class="d">features/</span>            機能ドメイン単位。UI と TanStack Query をセットで置く
+    │   ├── <span class="d">events/</span>
+    │   │   ├── SimpleInput.tsx      シンプルモードの入力欄
+    │   │   ├── ItemsInput.tsx       品目別モードの入力欄
+    │   │   ├── wizardReducer.ts     ウィザードの状態遷移（純関数・テスト対象）
+    │   │   └── queries.ts           useQuery / useMutation の定義
+    │   ├── <span class="d">monthly/</span>
+    │   │   ├── ExpenseForm.tsx      支出の追加・編集フォーム
+    │   │   ├── ExpenseList.tsx      支出一覧
+    │   │   ├── ResultView.tsx       精算結果の表示
+    │   │   └── queries.ts
+    │   └── <span class="d">users/</span>
+    │       ├── UserNameRow.tsx      表示名1件分の編集行
+    │       └── queries.ts
+    ├── <span class="d">components/</span>          ドメインを持たない汎用パーツ
+    │   ├── AmountInput.tsx  金額入力（整数のみ受け付ける）
+    │   ├── Button.tsx / Card.tsx / Toggle.tsx / ErrorBanner.tsx
+    └── <span class="d">lib/</span>
+        ├── api.ts           fetch ラッパ。エンベロープを剥がしエラーを例外化
+        ├── queryKeys.ts     クエリキーの唯一の出所（invalidate 漏れ防止）
+        ├── types.ts         API レスポンスの型
+        ├── format.ts        金額・日付の表示整形
+        ├── ym.ts            todayYm() など年月ユーティリティ
+        └── limits.ts        参加者数の上限などの定数</code></pre>
+  <p class="lead">
+    <code>routes/</code>（画面）→ <code>features/</code>（機能）→ <code>components/</code>（汎用）→ <code>lib/</code>（無依存）の順に依存が細くなる。
+    テストは対象と同じディレクトリに <code>*.test.tsx</code> として置き、離れた <code>__tests__/</code> は作らない。
+  </p>
+
+  <h3>2-6. e2e — Playwright</h3>
+<pre><code>e2e/
+├── package.json
+├── tsconfig.json
+├── playwright.config.ts     webServer は使わない（後述の理由）
+├── global-setup.ts          実行前の初期化
+├── event-simple.spec.ts     シンプルモードの一連の操作
+├── event-items.spec.ts      品目別モードの一連の操作
+├── monthly.spec.ts          月次の記録から締めまで
+└── <span class="d">helpers/</span>
+    ├── db.ts                テスト間で D1 の状態をリセット
+    ├── events.ts            イベントを事前に作るユーティリティ
+    └── locators.ts          共通のロケータ定義</code></pre>
+  <div class="note">
+    <strong>webServer を使わない理由</strong>
+    Windows では wrangler を落としても子の <code>workerd</code> が残り、Playwright がプロセスツリーを親から落とす保証がない。
+    そのため<strong>先に手で起動した <code>wrangler dev</code>（ポート 8788）に対して</strong>実行する。
+    8787 は別プロジェクトが常駐しているため避けている。
+  </div>
+
+  <h3>2-7. docs / .claude</h3>
+<pre><code>docs/
+├── app-analysis.md          移行前の Flask 実装の解析記録（既知の問題と対処）
+├── tech-stack.html          本ドキュメント
+├── tech-stack.css           本ドキュメントのスタイル
+└── <span class="d">superpowers/</span>
+    ├── <span class="d">specs/</span>
+    │   └── 2026-08-05-warikan-cloudflare-design.md   設計書
+    └── <span class="d">plans/</span>
+        ├── 2026-08-05-warikan-phase1-foundation-api.md   基盤と API
+        ├── 2026-08-07-warikan-phase2-react-frontend.md   フロントエンド
+        └── 2026-08-09-warikan-phase3-deploy-e2e.md       デプロイと E2E
+
+.claude/
+├── <span class="d">agents/</span>
+│   ├── ui-inspector.md      スマホ/タブレット/PC 幅でレイアウトを検査。コードは修正しない
+│   └── web-debugger.md      ブラウザで再現する不具合を追跡し原因を特定して修正する
+└── <span class="gen">settings.local.json</span>      ローカル専用の設定（gitignore）</code></pre>
+
+  <h3>2-8. 生成物と gitignore</h3>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr><th>パス</th><th>正体</th><th>消してよいか</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>node_modules/</code></td><td>依存パッケージ（ルートにホイスト）</td><td>可。<code>npm install</code> で復元</td></tr>
+        <tr><td><code>apps/web/dist/</code></td><td>Vite のビルド成果物。Worker が配信する実体</td><td>可。<code>npm run build -w @warikan/web</code> で復元</td></tr>
+        <tr><td><code>.wrangler/</code></td><td>ローカル D1 の実体と Worker のキャッシュ</td><td>可。ただしローカルのデータは消える（マイグレーション再適用が必要）</td></tr>
+        <tr><td><code>apps/api/worker-configuration.d.ts</code></td><td>wrangler が生成する型定義</td><td>可。ただし無いと <code>typecheck</code> が落ちる</td></tr>
+        <tr><td><code>apps/api/.dev.vars</code></td><td>ローカルの環境変数（秘密情報）</td><td><strong>不可</strong>。<code>.dev.vars.example</code> から手で作る</td></tr>
+        <tr><td><code>.playwright-mcp/</code></td><td>サブエージェントのスクショ・スナップショット</td><td>可</td></tr>
+        <tr><td><code>coverage/</code> / <code>playwright-report/</code> / <code>test-results/</code></td><td>テストの成果物</td><td>可</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="note">
+    <strong>新しい clone / worktree で最初にやること</strong>
+    <code>npm install</code> → <code>cp apps/api/.dev.vars.example apps/api/.dev.vars</code> → <code>npm run migrate:local -w @warikan/api</code>。
+    この3つのどれかを飛ばすと、<code>typecheck</code> や <code>wrangler dev</code> が一見無関係なエラーで落ちる。
+  </div>
+</section>
+
+<section>
+  <h2>3. プログラムの流れ</h2>
+  <p class="lead">ここは経路の要約。<strong>どのファイルがどの順番で動くのか</strong>を1手ずつ追ったものは <a href="program-flow.html">プログラムの動作順番</a> にある。</p>
+
+  <h3>3-1. リクエストの経路</h3>
+<pre><code>ブラウザ
+  │
+  ├─ Cloudflare Access（許可メール2件のみ通過、JWT を付与）
+  │
+  ▼
+Cloudflare Worker（1つ）
+  ├─ /api/*  → run_worker_first で Hono が処理
+  │            accessAuth → ルータ → db/ → D1（SQLite）
+  │            レスポンスは { ok:true, data } / { ok:false, error }
+  │
+  └─ それ以外 → Asset Worker が apps/web/dist の SPA を返す
+                （not_found_handling: single-page-application）</code></pre>
+  <div class="note">
+    <strong>run_worker_first は落とせない</strong>
+    この指定を外すと <code>/api/health</code> まで SPA の HTML を返して API が全滅する。しかも vitest は Asset Worker を再現しないため、壊してもテストは全部通ってしまう。assets の振り分けを変えたら <code>wrangler dev</code> で手検証すること。
+  </div>
+
+  <h3>3-2. 精算アルゴリズム（packages/shared）</h3>
+<pre><code>1. total     = Σ 各人の立て替え額
+2. base      = floor(total / 人数)          ← 全員の基本負担額
+3. remainder = total - base × 人数           ← 1円未満に割れない端数
+4. 端数は名前（同名なら id）のコードユニット昇順で、先頭から1円ずつ配る
+5. balance   = 立て替え額 - 負担額           ← 正が債権者、負が債務者
+6. 債権者と債務者を金額の大きい順に並べ、貪欲に突き合わせて送金を作る
+   → 送金回数は最大で「人数 − 1」回</code></pre>
+  <p class="lead">全工程が整数（円）演算のため、送金額の合計と各人の過不足は厳密に一致する。浮動小数点は金額計算に一切使わない。</p>
+
+  <h3>3-3. 割り勘の3モード</h3>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr><th>モード</th><th>参加者</th><th>入力内容</th><th>主な実装</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>シンプル</td><td>任意 1〜20人</td><td>参加者ごとに立て替え額を直接入力</td><td><code>features/events/SimpleInput.tsx</code></td></tr>
+        <tr><td>品目別</td><td>任意 1〜20人</td><td>品目・金額・支払者を記録し支払者ごとに合算</td><td><code>features/events/ItemsInput.tsx</code></td></tr>
+        <tr><td>月次</td><td>登録済みの2人固定</td><td>支払いの都度記録し、月末に集計して精算（50:50）</td><td><code>routes/MonthlyRecord.tsx</code> / <code>services/settle.ts</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>3-4. 月次の締め</h3>
+  <p class="lead">
+    「計算」を押すと精算結果を <code>snapshot_json</code> にスナップショット保存し、期間を <code>status='settled'</code> にする。
+    その後も支出の編集は自由で、確定済み期間の支出が変わると <code>is_dirty=1</code> が立ち、画面に再計算を促す警告が出る。
+  </p>
+</section>
+
+<section>
+  <h2>4. API エンドポイント</h2>
+  <p class="lead"><code>/api/health</code> 以外はすべて <code>accessAuth</code> を通る。レスポンスは共通エンベロープ。</p>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr><th>メソッド</th><th>パス</th><th>役割</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><span class="method get">GET</span></td><td><code>/api/health</code></td><td>疎通確認（認証不要）</td></tr>
+        <tr><td><span class="method get">GET</span></td><td><code>/api/me</code></td><td>ログイン中ユーザーの取得</td></tr>
+        <tr><td><span class="method patch">PATCH</span></td><td><code>/api/me</code></td><td>自分の表示名の変更</td></tr>
+        <tr><td><span class="method get">GET</span></td><td><code>/api/users</code></td><td>ユーザー一覧</td></tr>
+        <tr><td><span class="method patch">PATCH</span></td><td><code>/api/users/:id</code></td><td>相手の表示名の変更</td></tr>
+        <tr><td><span class="method get">GET</span></td><td><code>/api/categories</code></td><td>有効カテゴリ一覧</td></tr>
+        <tr><td><span class="method get">GET</span></td><td><code>/api/monthly</code></td><td>月次期間の一覧</td></tr>
+        <tr><td><span class="method get">GET</span></td><td><code>/api/monthly/:ym</code></td><td>指定月の期間と支出</td></tr>
+        <tr><td><span class="method post">POST</span></td><td><code>/api/monthly/:ym/expenses</code></td><td>支出の追加</td></tr>
+        <tr><td><span class="method patch">PATCH</span></td><td><code>/api/monthly/expenses/:id</code></td><td>支出の更新</td></tr>
+        <tr><td><span class="method delete">DELETE</span></td><td><code>/api/monthly/expenses/:id</code></td><td>支出の削除</td></tr>
+        <tr><td><span class="method post">POST</span></td><td><code>/api/monthly/:ym/settle</code></td><td>締め（スナップショット保存）</td></tr>
+        <tr><td><span class="method get">GET</span></td><td><code>/api/monthly/:ym/result</code></td><td>精算結果の取得</td></tr>
+        <tr><td><span class="method patch">PATCH</span></td><td><code>/api/monthly/:ym/result/transfers/:index</code></td><td>送金の支払い済みフラグ</td></tr>
+        <tr><td><span class="method get">GET</span></td><td><code>/api/events</code></td><td>イベント一覧</td></tr>
+        <tr><td><span class="method post">POST</span></td><td><code>/api/events</code></td><td>イベント作成＋精算計算</td></tr>
+        <tr><td><span class="method get">GET</span></td><td><code>/api/events/:id</code></td><td>イベント詳細</td></tr>
+        <tr><td><span class="method delete">DELETE</span></td><td><code>/api/events/:id</code></td><td>イベント削除</td></tr>
+        <tr><td><span class="method patch">PATCH</span></td><td><code>/api/events/:id/settlements/:settlementId</code></td><td>送金の支払い済みフラグ</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2>5. データベース（Cloudflare D1）</h2>
+  <p class="lead">D1 は SQLite ベース。対話的トランザクション非対応のため、複数文を原子的に実行する箇所は <code>env.DB.batch([...])</code> を使う。</p>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr><th>テーブル</th><th>役割</th><th>主なカラム</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>users</code></td><td>許可メールのユーザー2名</td><td>id, email(UNIQUE), display_name</td></tr>
+        <tr><td><code>categories</code></td><td>月次支出のカテゴリ</td><td>id, name(UNIQUE), sort_order, is_active</td></tr>
+        <tr><td><code>monthly_periods</code></td><td>月次の期間と締め状態</td><td>year, month(UNIQUE), status, snapshot_json, is_dirty</td></tr>
+        <tr><td><code>monthly_expenses</code></td><td>月次の個別支出</td><td>period_id, paid_by, amount, category_id, spent_on</td></tr>
+        <tr><td><code>events</code></td><td>単発の割り勘イベント</td><td>title, mode, total, per_person</td></tr>
+        <tr><td><code>event_members</code></td><td>イベント参加者と立て替え額</td><td>event_id, name, paid, position</td></tr>
+        <tr><td><code>event_items</code></td><td>品目別モードの明細</td><td>event_id, name, amount, paid_by_member_id</td></tr>
+        <tr><td><code>event_settlements</code></td><td>算出された送金リスト</td><td>from_member_id, to_member_id, amount, is_paid</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2>6. ライブラリとフレームワーク</h2>
+
+  <h3>ランタイム依存（本番のコードに入るもの）</h3>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr><th>パッケージ</th><th>バージョン</th><th>所属</th><th>役割</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>hono</code></td><td>^4.13.0</td><td>api</td><td>Workers 向けの軽量 Web フレームワーク。ルーティング・ミドルウェア・型付き Context</td></tr>
+        <tr><td><code>jose</code></td><td>^6.2.8</td><td>api</td><td>Cloudflare Access の JWT を JWKS で検証（<code>createRemoteJWKSet</code> / <code>jwtVerify</code>）</td></tr>
+        <tr><td><code>zod</code></td><td>^4.4.3</td><td>api</td><td>リクエストボディのスキーマ検証。境界での入力バリデーション</td></tr>
+        <tr><td><code>react</code> / <code>react-dom</code></td><td>^19.2.8</td><td>web</td><td>UI ライブラリ。<code>createRoot</code> + StrictMode</td></tr>
+        <tr><td><code>react-router</code></td><td>^8.3.0</td><td>web</td><td>SPA ルーティング。v8 なので <code>react-router-dom</code> は使わず全て <code>react-router</code> から import</td></tr>
+        <tr><td><code>@tanstack/react-query</code></td><td>^5.101.4</td><td>web</td><td>サーバー状態の管理。楽観更新はせず、更新後に該当クエリを invalidate</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>開発・テスト用の依存</h3>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr><th>パッケージ</th><th>バージョン</th><th>役割</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>typescript</code></td><td>^7.0.2</td><td>型検査（<code>tsc --noEmit</code>）。ルートに1つ、全ワークスペース共通</td></tr>
+        <tr><td><code>vite</code></td><td>^8.2.1</td><td>web の開発サーバーと本番バンドラ</td></tr>
+        <tr><td><code>@vitejs/plugin-react</code></td><td>^6.0.5</td><td>Vite の React プラグイン（JSX 変換・Fast Refresh）</td></tr>
+        <tr><td><code>vitest</code></td><td>^4.1.10</td><td>ユニット／統合テストランナー。3ワークスペースすべてで使用</td></tr>
+        <tr><td><code>@cloudflare/vitest-pool-workers</code></td><td>^0.20.2</td><td>vitest を実際の workerd 上で走らせ、D1 バインディング込みで API をテストする</td></tr>
+        <tr><td><code>@vitest/coverage-v8</code></td><td>^4.1.10</td><td>カバレッジ（後述の制約あり）</td></tr>
+        <tr><td><code>@testing-library/react</code></td><td>^16.3.2</td><td>React コンポーネントのテスト</td></tr>
+        <tr><td><code>@testing-library/user-event</code></td><td>^14.6.3</td><td>実ユーザーに近い操作のシミュレート</td></tr>
+        <tr><td><code>@testing-library/jest-dom</code></td><td>^7.0.0</td><td>DOM 向けのカスタムマッチャ</td></tr>
+        <tr><td><code>jsdom</code></td><td>^29.1.1</td><td>web のテスト環境</td></tr>
+        <tr><td><code>fast-check</code></td><td>^4.9.0</td><td>Property-based テスト。精算ロジックの不変条件（送金合計＝過不足）を検証</td></tr>
+        <tr><td><code>@playwright/test</code></td><td>^1.62.1</td><td>E2E テスト</td></tr>
+        <tr><td><code>wrangler</code></td><td>^4.119.0</td><td>Workers の CLI。dev サーバー・デプロイ・D1 マイグレーション</td></tr>
+        <tr><td><code>@cloudflare/workers-types</code></td><td>^5.x</td><td><code>D1Database</code> などランタイム型定義</td></tr>
+        <tr><td><code>@types/react</code> / <code>@types/react-dom</code> / <code>@types/node</code></td><td>—</td><td>型定義</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2>7. インストールされているツール・実行環境</h2>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr><th>ツール</th><th>種類</th><th>用途</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>Node.js 24.13.1</strong></td><td>ランタイム</td><td>開発時のツール実行環境（本番の実行環境ではない）</td></tr>
+        <tr><td><strong>npm 11.8.0</strong></td><td>パッケージマネージャ</td><td>workspaces でモノレポを管理</td></tr>
+        <tr><td><strong>Vite 8</strong></td><td>ビルドツール</td><td>web の dev サーバー（ポート 5173、<code>/api</code> を localhost:8787 へプロキシ）と本番ビルド</td></tr>
+        <tr><td><strong>Wrangler 4</strong></td><td>CLI</td><td><code>wrangler dev</code> でローカル Worker 起動、<code>wrangler deploy</code>、<code>wrangler d1 migrations apply</code></td></tr>
+        <tr><td><strong>TypeScript 7 (tsc)</strong></td><td>型検査</td><td>コード生成はせず型検査のみ</td></tr>
+        <tr><td><strong>Vitest 4</strong></td><td>テストランナー</td><td>shared / api / web の3ワークスペース</td></tr>
+        <tr><td><strong>Playwright</strong></td><td>E2E</td><td>ブラウザ自動操作。ポート 8788 の wrangler dev を叩く</td></tr>
+        <tr><td><strong>Cloudflare Workers</strong></td><td>実行基盤</td><td>本番のサーバーレス実行環境（workerd）</td></tr>
+        <tr><td><strong>Cloudflare D1</strong></td><td>データベース</td><td>SQLite ベースのマネージド DB（<code>warikan-db</code>）</td></tr>
+        <tr><td><strong>Cloudflare Access</strong></td><td>認証</td><td>ドメイン全体を保護し、許可メール2件のみ通す</td></tr>
+        <tr><td><strong>Playwright MCP</strong></td><td>開発支援</td><td><code>.mcp.json</code> で宣言。<code>ui-inspector</code> / <code>web-debugger</code> サブエージェントが使用</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>主なコマンド</h3>
+<pre><code>npm install                              # 依存のインストール
+npm run migrate:local -w @warikan/api    # ローカル D1 にマイグレーション適用
+npm run dev -w @warikan/api              # Worker を起動（http://localhost:8787）
+npm run dev -w @warikan/web              # Vite dev サーバー（http://localhost:5173）
+npm run build -w @warikan/web            # SPA を apps/web/dist へビルド
+npm test                                 # 全ワークスペースのテスト
+npm run typecheck                        # 全ワークスペースの型検査
+npm run test:e2e                         # Playwright（起動済み wrangler dev 前提）</code></pre>
+</section>
+
+<section>
+  <h2>8. 設計上の制約</h2>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr><th>制約</th><th>理由</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>金額はすべて整数（円）。浮動小数点を使わない</td><td>丸め誤差で送金合計と過不足がずれるのを防ぐ</td></tr>
+        <tr><td><code>localeCompare</code> 禁止、<code>compareStr</code> を使う</td><td>環境の ICU データ差で端数の配分先が変わるため</td></tr>
+        <tr><td>複数文の原子実行は <code>env.DB.batch([...])</code></td><td>D1 が対話的トランザクション非対応</td></tr>
+        <tr><td>API レスポンスは共通エンベロープ</td><td><code>{ok:true,data}</code> / <code>{ok:false,error:{code,message,fields?}}</code> に統一</td></tr>
+        <tr><td>1ファイル 200〜400行を目安、800行を上限</td><td>1ファイル1責務を保つ</td></tr>
+        <tr><td>クエリキーは <code>lib/queryKeys.ts</code> からのみ取る</td><td>invalidate 漏れを防ぐ</td></tr>
+        <tr><td>react-router は v8。<code>react-router-dom</code> を使わない</td><td>v8 で import 元が統合された</td></tr>
+        <tr><td>繰り返す行のボタンには行を識別できる名前を入れる</td><td>全行同名だと読み上げでも自動テストでも並べ替え不具合を検知できない</td></tr>
+        <tr><td>実在のメールアドレスをコードに書かない</td><td>テストは <code>me@example.com</code> / <code>partner@example.com</code></td></tr>
+        <tr><td><code>Cf-Access-Authenticated-User-Email</code> ヘッダを信用しない</td><td>Access を経由しないリクエストで詐称できる。必ず JWT を検証する</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note">
+    <strong>テストで検証できないこと</strong>
+    ① 静的配信 — vitest は Asset Worker を再現しないので <code>assets</code> の振り分けを壊してもテストは通る。
+    ② レイアウト — jsdom はスタイルを解決しないので幅・折り返し・横スクロールは一切見えない。
+    どちらも <code>wrangler dev</code> を起動して実物で確認するしかない。
+  </div>
+
+  <div class="note">
+    <strong>カバレッジの制約</strong>
+    v8 プロバイダは workerd 上で動かない（<code>node:inspector/promises</code> を解決できない）。計測するときは <code>@vitest/coverage-istanbul</code> を入れて <code>--coverage.provider=istanbul</code> を使う。
+  </div>
+</section>
+
+<footer>
+  割り勘 (warikan) — 技術構成ドキュメント / 生成日 2026-08-18<br>
+  参照: <code>CLAUDE.md</code>、<code>docs/superpowers/specs/</code>（設計書）、<code>docs/superpowers/plans/</code>（実装計画）
+</footer>
+
+</div>
+</body>
+</html>

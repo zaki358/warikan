@@ -1,0 +1,594 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>割り勘アプリ プログラムの動作順番</title>
+<link rel="stylesheet" href="tech-stack.css">
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>割り勘 (warikan) — プログラムの動作順番</h1>
+  <p>
+    URL を開いてから画面に金額が出るまで、そして「計算する」を押してから精算結果が保存されるまで、
+    <strong>どのファイルが・どの順番で・どこで</strong>動くのかを追った文書。
+    技術の一覧は <a href="tech-stack.html">技術構成ドキュメント</a> 側にある。
+  </p>
+  <div class="legend">
+    <span><span class="who browser">ブラウザ</span> あなたのスマホ / PC の中で動く</span>
+    <span><span class="who access">Access</span> Cloudflare の認証の関所</span>
+    <span><span class="who worker">Worker</span> Cloudflare のサーバー上で動く</span>
+    <span><span class="who shared">shared</span> 精算ロジック（純関数）</span>
+    <span><span class="who db">D1</span> データベース</span>
+  </div>
+  <nav class="toc">
+    <ol>
+      <li><a href="#overview">まず全体像 — プログラムは3か所で動く</a></li>
+      <li><a href="#boot">① 初回アクセス — index.html が出るまで、その後データが出るまで</a></li>
+      <li><a href="#event">② 単発の割り勘 — 入力してから計算が走るまで</a></li>
+      <li><a href="#monthly">③ 月次 — 記録して、締めて、あとから直す</a></li>
+      <li><a href="#algo">精算アルゴリズムが動く順番</a></li>
+      <li><a href="#when">どのファイルがいつ動くか（一覧）</a></li>
+      <li><a href="#devprod">開発中と本番で順番が変わるところ</a></li>
+      <li><a href="#glossary">用語のちいさな辞書</a></li>
+    </ol>
+  </nav>
+</header>
+
+<section id="overview">
+  <h2>1. まず全体像 — プログラムは3か所で動く</h2>
+  <p class="lead">
+    「アプリ」と言っても1本のプログラムが上から下へ流れるわけではない。
+    <strong>別々の場所で動く3つのプログラムが、HTTP で会話しながら進む</strong>。
+    順番を追うときは、いま自分がどこの話をしているかを常に意識するとよい。
+  </p>
+
+  <div class="grid">
+    <div class="card web">
+      <h3>① 画面（ブラウザの中）</h3>
+      <span class="path">apps/web/src/**</span>
+      <p>React の SPA。ボタンを押す・文字を打つといった操作を受け、必要になったらサーバーへ聞きに行く。</p>
+      <ul>
+        <li>入口: <code>main.tsx</code></li>
+        <li>画面の振り分け: <code>App.tsx</code></li>
+        <li>通信: <code>lib/api.ts</code></li>
+      </ul>
+    </div>
+    <div class="card api">
+      <h3>② API（Cloudflare の Worker の中）</h3>
+      <span class="path">apps/api/src/**</span>
+      <p>Hono のサーバー。認証を確かめ、入力を検証し、計算し、D1 に読み書きして JSON を返す。</p>
+      <ul>
+        <li>入口: <code>index.ts</code></li>
+        <li>関所: <code>middleware/auth.ts</code></li>
+        <li>SQL: <code>db/*.ts</code></li>
+      </ul>
+    </div>
+    <div class="card shared">
+      <h3>③ 精算ロジック（②から呼ばれる）</h3>
+      <span class="path">packages/shared/src/settlement.ts</span>
+      <p>「誰が誰にいくら払うか」を決める純関数。DB も HTTP も知らない。入力を渡すと答えを返すだけ。</p>
+      <ul>
+        <li><code>computeShares</code></li>
+        <li><code>calculateSettlement</code></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="note">
+    <strong>覚えておくと迷わない一点</strong>
+    ①と②は<strong>同じ 1 つの Worker から配信される</strong>。画面の HTML も API も
+    <code>https://warikan.y-kakeibo.workers.dev</code> という同じ住所から返ってくる。
+    <code>/api/</code> で始まる URL だけ ② が処理し、それ以外は ① の SPA が返る。
+    振り分けているのは <code>apps/api/wrangler.jsonc</code> の <code>run_worker_first: ["/api/*"]</code> という 1 行。
+  </div>
+
+<pre><code>          あなた
+            │  URL を開く / ボタンを押す
+            ▼
+   ┌─────────────────────┐
+   │  Cloudflare Access  │  許可メール2件だけ通す。通ったリクエストに JWT を貼る
+   └─────────────────────┘
+            │
+            ▼
+   ┌──────────────────────────────────────────────┐
+   │            Worker（1つだけ）                  │
+   │                                              │
+   │  URL が /api/* か？                           │
+   │    ├─ はい → Hono（②）→ 精算ロジック（③）    │
+   │    │                   └→ D1（SQLite）        │
+   │    └─ いいえ → Asset Worker                   │
+   │                 → apps/web/dist の index.html │
+   └──────────────────────────────────────────────┘</code></pre>
+</section>
+
+<section id="boot">
+  <h2>2. ① 初回アクセス — index.html が出るまで、その後データが出るまで</h2>
+  <p class="lead">
+    ここがいちばん質問の多いところ。<strong>「HTML が出る」と「数字が出る」は別の往復</strong>で、
+    画面は先に出て、データはあとから届いて差し替わる。
+  </p>
+
+  <h3 class="kicker">前半 — 画面の骨格が出るまで（1往復目）</h3>
+  <ol class="flow">
+    <li>
+      <span class="title"><span class="who browser">ブラウザ</span> URL を開く</span>
+      <p class="body"><code>https://warikan.y-kakeibo.workers.dev/</code> にリクエストが飛ぶ。この時点ではまだ自分のコードは 1 行も動いていない。</p>
+    </li>
+    <li>
+      <span class="title"><span class="who access">Access</span> 関所で止められる</span>
+      <p class="body">
+        Cloudflare Access がリクエストを横取りする。未ログインならログイン画面が出て、
+        許可された 2 件のメール以外はここで終わり。通過すると、以降のリクエストに
+        <code>Cf-Access-Jwt-Assertion</code> という署名付きのヘッダが自動で貼られる。
+      </p>
+    </li>
+    <li>
+      <span class="title"><span class="who worker">Worker</span> URL を見て振り分ける</span>
+      <p class="body">
+        <code>/</code> は <code>/api/*</code> に一致しないので、Hono は呼ばれない。
+        Cloudflare の Asset Worker が <code>apps/web/dist/index.html</code> を返す。
+        <code>/monthly/2026-08</code> のようなアプリ内の URL を直接開いても、
+        <code>not_found_handling: "single-page-application"</code> の指定によって同じ <code>index.html</code> が返る。
+      </p>
+    </li>
+    <li>
+      <span class="title"><span class="who browser">ブラウザ</span> index.html を読む</span>
+      <p class="body">
+        中身はほとんど空で、実質この 2 行しかない。<code>#root</code> は<strong>空の箱</strong>で、画面はまだ何も無い。
+      </p>
+<pre><code>&lt;div id="root"&gt;&lt;/div&gt;
+&lt;script type="module" src="/assets/index-xxxxxxxx.js"&gt;&lt;/script&gt;</code></pre>
+      <p class="body">
+        （元のソースは <code>apps/web/index.html</code> の <code>src="/src/main.tsx"</code>。
+        <code>npm run build -w @warikan/web</code> のときに Vite がハッシュ付きの JS へ書き換える）
+      </p>
+    </li>
+    <li>
+      <span class="title"><span class="who browser">ブラウザ</span> JS を取りに行く（Worker がまた返す）</span>
+      <p class="body">この JS も <code>/api/*</code> ではないので Asset Worker が <code>dist</code> から返す。ここまでで往復 2 回。</p>
+    </li>
+    <li>
+      <span class="title"><span class="who browser">main.tsx</span> ここが自分のコードの本当の 1 行目</span>
+      <p class="body">
+        <code>apps/web/src/main.tsx</code> が上から順に走る。
+      </p>
+<pre><code>1. QueryClient を作る（サーバーから取った値の置き場。staleTime: 0 ＝ 古い金額を見せない）
+2. document.getElementById("root") で箱を掴む（無ければ即 throw）
+3. createRoot(root).render(...) で React を起動する
+     StrictMode
+       └ QueryClientProvider   ← 以降どこからでもキャッシュを触れるようにする
+           └ BrowserRouter     ← URL を React に見せる
+               └ App           ← ここから下が画面</code></pre>
+    </li>
+    <li>
+      <span class="title"><span class="who browser">App.tsx</span> URL を見て画面を1つ選ぶ</span>
+      <p class="body">
+        <code>useReducer</code> でウィザードの下書き状態を用意し、<code>&lt;Routes&gt;</code> が今の URL と各 <code>&lt;Route&gt;</code> を突き合わせる。
+        <code>/</code> なら <code>Home</code>、<code>/monthly/2026-08</code> なら <code>MonthlyRecord</code>、
+        知らない URL なら <code>/</code> へ飛ばす。
+      </p>
+    </li>
+    <li>
+      <span class="title"><span class="who browser">Home.tsx</span> 画面が描かれる（ただし数字はまだ空）</span>
+      <p class="body">
+        <code>useMonthly(todayYm())</code> と <code>useEvents()</code> を呼ぶ。
+        この2行が「サーバーに聞いてきて」という<strong>注文</strong>で、待たずに先へ進む。
+        だから最初の一瞬はカードの枠と「読み込み中…」だけが表示される。
+      </p>
+    </li>
+  </ol>
+
+  <h3 class="kicker">後半 — 数字が届くまで（3往復目以降。ここで初めて API が動く）</h3>
+  <ol class="flow">
+    <li>
+      <span class="title"><span class="who browser">TanStack Query</span> キャッシュに無ければ取りに行く</span>
+      <p class="body">
+        <code>queryKeys.monthly("2026-08")</code> ＝ <code>["monthly","2026-08"]</code> という鍵で置き場を見る。
+        初回は空なので <code>queryFn</code> を実行 → <code>apiGet("/api/monthly/2026-08")</code>。
+      </p>
+    </li>
+    <li>
+      <span class="title"><span class="who browser">lib/api.ts</span> fetch を投げる</span>
+      <p class="body">
+        URL は必ず<strong>相対パス</strong>で書く（<code>/api/...</code>）。同じ住所なので、Access が貼った JWT も自動で付いていく。
+        通信そのものが失敗したときは、英語の <code>Failed to fetch</code> を素通ししないで
+        <code>ApiError("NETWORK_ERROR", …, status 0)</code> に包み直す。
+      </p>
+    </li>
+    <li>
+      <span class="title"><span class="who worker">index.ts</span> 今度は Hono が呼ばれる</span>
+      <p class="body">
+        URL が <code>/api/*</code> なので <code>run_worker_first</code> により Worker が先に処理する。
+        <code>apps/api/src/index.ts</code> の登録順がそのまま実行順になる。
+      </p>
+<pre><code>app.onError(onError)                  ← 例外の受け皿を先に張る
+app.get("/api/health", …)             ← 認証の前に置く（監視用。ここだけ素通し）
+app.use("/api/*", accessAuth())       ← 以降すべてこの関所を通る
+app.route("/api/me",         meRoutes)
+app.route("/api/users",      userRoutes)
+app.route("/api/categories", categoryRoutes)
+app.route("/api/monthly",    monthlyRoutes)   ← 今回はこれ
+app.route("/api/events",     eventRoutes)</code></pre>
+    </li>
+    <li>
+      <span class="title"><span class="who worker">middleware/auth.ts</span> 本人確認（毎リクエスト）</span>
+      <p class="body">
+        <code>Cf-Access-Jwt-Assertion</code> の JWT を JWKS で<strong>署名検証</strong>し、そこから初めてメールを取り出す。
+        <code>Cf-Access-Authenticated-User-Email</code> ヘッダは Access を経由しない経路で詐称できるので使わない。
+        取り出したメールを許可リストと照合し、<code>users</code> に行が無ければ作り、
+        <code>c.set("user", …)</code> に載せてから <code>next()</code> で先へ渡す。
+        <em>ローカル開発では <code>DEV_BYPASS_EMAIL</code> があると JWT 検証だけ飛ばす（許可リストの照合は常に効く）。</em>
+      </p>
+    </li>
+    <li>
+      <span class="title"><span class="who worker">routes/monthly.ts</span> 該当のハンドラが動く</span>
+      <p class="body">
+        <code>GET /:ym</code> が選ばれる。<code>parseYm("2026-08")</code> で形式を確かめ（駄目なら 400）、
+        <code>getOrCreatePeriod</code> → <code>listExpenses</code> の順に <code>db/monthly.ts</code> を呼ぶ。
+      </p>
+    </li>
+    <li>
+      <span class="title"><span class="who db">D1</span> SQL が走る</span>
+      <p class="body">
+        <code>db/*.ts</code> だけが SQL を書く場所。ルータは SQL を直接書かない。
+        その月の <code>monthly_periods</code> の行が無ければ <code>INSERT … ON CONFLICT DO NOTHING</code> で作ってから読み直す。
+      </p>
+    </li>
+    <li>
+      <span class="title"><span class="who worker">lib/response.ts</span> 決まった封筒に入れて返す</span>
+      <p class="body">
+        成功も失敗も形を揃える。この形は全エンドポイント共通。
+      </p>
+<pre><code>成功: { "ok": true,  "data": { "period": {…}, "expenses": [ … ] } }
+失敗: { "ok": false, "error": { "code": "VALIDATION_ERROR", "message": "…" } }</code></pre>
+    </li>
+    <li>
+      <span class="title"><span class="who browser">lib/api.ts</span> 封筒を開ける</span>
+      <p class="body">
+        <code>ok: true</code> なら <code>data</code> だけを取り出して返す。
+        <code>ok: false</code> なら <code>ApiError</code> を投げる。画面側は <code>data</code> の中身だけを見ればよくなる。
+      </p>
+    </li>
+    <li>
+      <span class="title"><span class="who browser">React</span> 数字が入って描き直される</span>
+      <p class="body">
+        <code>useQuery</code> が値を持ったことで <code>Home</code> が再描画され、「読み込み中…」が実際の金額に変わる。
+        <strong>ここで初めて画面が完成する。</strong>
+      </p>
+    </li>
+  </ol>
+
+  <div class="note">
+    <strong>2回目以降は前半が丸ごと省かれる</strong>
+    画面内のリンクを押しても、ブラウザはページを読み直さない。<code>BrowserRouter</code> が URL だけを書き換え、
+    <code>App</code> の <code>&lt;Routes&gt;</code> が別のコンポーネントに差し替える。つまり <code>main.tsx</code> が走るのは<strong>最初の1回だけ</strong>で、
+    以降は「後半」の API 往復だけが繰り返される。F5 を押すと前半からやり直しになる。
+  </div>
+</section>
+
+<section id="event">
+  <h2>3. ② 単発の割り勘 — 入力してから計算が走るまで</h2>
+  <p class="lead">
+    「入力するとこのプログラムが起動する」の実際。<strong>入力中はサーバーと一切通信しない</strong>。
+    通信するのは最後に「計算する」を押した 1 回だけで、割り勘の計算はそこでサーバー側が行う。
+  </p>
+
+  <ol class="flow">
+    <li>
+      <span class="title"><span class="who browser">EventNew.tsx</span> ステップ1 — タイトル・モード・参加者</span>
+      <p class="body">
+        文字を打つたびに <code>dispatch({ type: "setMemberName", … })</code> が呼ばれる。
+        受けるのは <code>features/events/wizardReducer.ts</code>。
+        <strong>元の状態は書き換えず、変更を反映した新しいオブジェクトを返す</strong>ので、React はそれを見て描き直す。
+        ここまでネットワークは 0 回。
+      </p>
+    </li>
+    <li>
+      <span class="title"><span class="who browser">App.tsx</span> 下書きの置き場は App が持っている</span>
+      <p class="body">
+        ウィザードの途中状態は <code>App</code> の <code>useReducer</code> にあり、
+        <code>EventNew</code> / <code>EventInput</code> へ props で渡される。だからステップ間を行き来しても入力が消えない。
+        （旧 Flask 版は Cookie に載せていて別タブで壊れた。その依存を無くした形）
+      </p>
+    </li>
+    <li>
+      <span class="title"><span class="who browser">EventInput.tsx</span> ステップ2 — 金額 or 品目</span>
+      <p class="body">
+        モードによって <code>SimpleInput</code>（参加者ごとの立替額）か <code>ItemsInput</code>（品目・金額・支払者）が描かれる。
+        画面が変わっただけで、まだ通信していない。
+      </p>
+    </li>
+    <li>
+      <span class="title"><span class="who browser">wizardReducer.ts</span> 送る前の下調べ</span>
+      <p class="body">
+        <code>wizardErrors(state)</code> が名前の空欄や品目の金額未入力を人が読める文言で返す。
+        1件でもあればボタンは <code>disabled</code> のままで、押しても <code>submit</code> は即 return する。
+      </p>
+    </li>
+    <li>
+      <span class="title"><span class="who browser">「計算する」を押す</span> ここで初めてサーバーへ</span>
+      <p class="body">
+        <code>toCreatePayload(state)</code> が画面用の下書きを API の形に変換する
+        （品目モードでは <code>paid</code> を 0 で送り、サーバー側で品目から積み直す）。
+        続いて <code>createEvent.mutate(payload)</code> → <code>apiSend("POST", "/api/events", payload)</code>。
+      </p>
+    </li>
+    <li>
+      <span class="title"><span class="who worker">middleware/auth.ts → routes/events.ts</span> 関所を通ってハンドラへ</span>
+      <p class="body">
+        <code>eventRoutes.post("/")</code> が受け取り、<strong>まず zod で検証し直す</strong>。
+        画面の検証は親切のためのもので、サーバーは受け取った JSON を信用しない
+        （人数 1〜20、名前 30 字、金額は 0 以上 1,000 万以下の整数、品目 200 件まで）。
+      </p>
+    </li>
+    <li>
+      <span class="title"><span class="who worker">routes/events.ts</span> 参加者に id を振る</span>
+      <p class="body">
+        <code>newId()</code>（＝ <code>crypto.randomUUID()</code>）で全員に id を付ける。
+        以降は名前ではなく id で識別するので、同名の参加者が2人いても破綻しない。
+        品目モードなら、ここで品目の金額を支払者ごとに合算して各人の <code>paid</code> を組み立てる。
+      </p>
+    </li>
+    <li>
+      <span class="title"><span class="who shared">packages/shared</span> 割り勘の計算本体が走る</span>
+      <p class="body">
+        <code>calculateSettlement(participants)</code> を呼ぶ。ここが「このプログラムが起動する」瞬間で、
+        誰が誰にいくら送るかが決まる（詳しい順番は<a href="#algo">次章</a>）。
+        <strong>この関数は D1 も HTTP も知らない</strong>ので、単体でテストできる。
+      </p>
+    </li>
+    <li>
+      <span class="title"><span class="who db">db/events.ts</span> まとめて保存する</span>
+      <p class="body">
+        イベント本体・参加者・品目・送金の 4 種類を <code>env.DB.batch([...])</code> で<strong>一括で</strong>書く。
+        D1 は対話的トランザクションを持たないため、複数文を原子的に実行したい箇所は必ず <code>batch</code> を使う。
+      </p>
+    </li>
+    <li>
+      <span class="title"><span class="who worker">→ ブラウザ</span> 作った内容を丸ごと返す</span>
+      <p class="body"><code>{ ok: true, data: { id, title, total, perPerson, members, items, settlements } }</code>。</p>
+    </li>
+    <li>
+      <span class="title"><span class="who browser">features/events/queries.ts</span> 成功後の後片付け</span>
+      <p class="body">
+        <code>onSuccess</code> で <code>invalidateQueries(queryKeys.events())</code>。
+        <strong>手元のキャッシュを書き換えるのではなく「この鍵の値は古い」と印を付ける</strong>だけで、
+        次にホームを開いたときサーバーから取り直される。金額を扱うので楽観更新はしない。
+      </p>
+    </li>
+    <li>
+      <span class="title"><span class="who browser">EventInput.tsx → EventDetail.tsx</span> 結果画面へ</span>
+      <p class="body">
+        <code>onCreated()</code> でウィザードを <code>reset</code>（次回に前の入力を持ち越さない）してから
+        <code>navigate("/events/" + event.id)</code>。移った先の <code>EventDetail</code> が <code>useEvent(id)</code> を呼び、
+        <code>GET /api/events/:id</code> でもう一往復して確定した内容を表示する。
+      </p>
+    </li>
+  </ol>
+
+  <div class="note">
+    <strong>なぜ計算をブラウザでやらないのか</strong>
+    保存する数字と画面に出す数字を必ず一致させるため。計算をサーバーの1か所に寄せておけば、
+    「表示は合っているが DB の値が違う」という食い違いが原理的に起きない。
+    ブラウザ側の計算は、合計を足すといった<strong>表示のためだけの足し算</strong>に限っている。
+  </div>
+</section>
+
+<section id="monthly">
+  <h2>4. ③ 月次 — 記録して、締めて、あとから直す</h2>
+  <p class="lead">単発と違い、月次は「その都度記録 → 月末に締める」という2段構え。締めたあとの編集も許すぶん、順番が少し込み入る。</p>
+
+  <h3>4-1. 画面を開く — 4本の問い合わせが同時に走る</h3>
+  <p class="lead">
+    <code>MonthlyRecord</code> は <code>useMe()</code> / <code>useUsers()</code> / <code>useCategories()</code> / <code>useMonthly(ym)</code> を並べて呼ぶ。
+    これらは<strong>順番待ちをせず同時に</strong>飛び、届いたものから画面に入る。
+    <code>users</code> と <code>categories</code> は滅多に変わらないので <code>staleTime: 5分</code>、金額を含む <code>monthly</code> は 0 秒。
+  </p>
+
+  <h3>4-2. 支出を1件足す</h3>
+<pre><code>ExpenseForm で入力 → onSubmit
+  → useAddExpense(ym).mutate(input)                   [ブラウザ]
+  → POST /api/monthly/2026-08/expenses                [通信]
+  → accessAuth → monthlyRoutes.post("/:ym/expenses")  [Worker]
+      ├ zod で形を検証（金額は整数、itemName は 60 字まで…）
+      ├ spentOnInPeriod() でその日付が本当にその月に在るか（2月31日を弾く）
+      ├ validateRefs() で支払者とカテゴリが実在するかを D1 に問い合わせ
+      ├ getOrCreatePeriod() でその月の期間行を用意
+      └ insertExpense() → env.DB.batch([ INSERT 支出, 期間を is_dirty=1 にする ])
+  → { ok: true, data: 支出 } を 201 で返す
+  → onSuccess: monthly(ym) と monthlyResult(ym) を invalidate      [ブラウザ]
+  → 印の付いたクエリが自動で再取得され、一覧と合計が更新される</code></pre>
+  <p class="lead">
+    <code>is_dirty</code> を立てる UPDATE を同じ <code>batch</code> に入れているのが要点。
+    支出だけ入って「確定済みなのに印が付いていない」という中途半端な状態を作らない。
+    なお <code>markDirtyStatement</code> の SQL には <code>AND status = 'settled'</code> が付いていて、
+    まだ締めていない月では何も起きない。
+  </p>
+
+  <h3>4-3. 締める（「計算する」）</h3>
+<pre><code>MonthlyResult の「計算する」→ useSettle(ym).mutate()
+  → POST /api/monthly/2026-08/settle
+  → monthlyRoutes.post("/:ym/settle")
+      ├ readSnapshot(period)   … 前回の結果があれば読む
+      ├ buildSnapshot(db, period)                       [services/settle.ts]
+      │    ├ listUsers / listExpenses / listActiveCategories を Promise.all で同時に取得
+      │    ├ 支払者ごとに合算して participants を組む
+      │    ├ calculateSettlement(participants)          [packages/shared] ← 計算本体
+      │    └ カテゴリ別の内訳を金額の降順（同額は名前順）で並べる
+      ├ mergeIsPaid(次, 前) … from/to/金額が完全一致する送金だけ「支払済み」を引き継ぐ
+      └ saveSnapshot() → snapshot_json に保存し status='settled', is_dirty=0
+  → 結果をそのまま返す → invalidate → 画面に反映</code></pre>
+  <p class="lead">
+    結果は表示のたびに計算し直すのではなく、<strong>その時点の答えを JSON で焼き付けて保存する</strong>（スナップショット）。
+    「渡した/渡していない」のチェックはこの JSON の中の <code>isPaid</code> を書き換えるだけなので、
+    <code>status</code> や <code>is_dirty</code> は動かず、無効化するのも <code>monthlyResult(ym)</code> だけで済む。
+  </p>
+
+  <h3>4-4. 締めたあとに支出を直したとき</h3>
+  <p class="lead">
+    編集・削除も 4-2 と同じく <code>batch</code> の中で <code>is_dirty=1</code> を立てる。
+    次にホームや精算画面を開くと <code>isDirty</code> が <code>true</code> で返り、
+    「計算後に記録が変わっています」という警告が出る。
+    <strong>保存済みのスナップショット自体は勝手に書き換えない</strong> — もう一度「計算する」を押すまで、前の答えがそのまま残る。
+  </p>
+</section>
+
+<section id="algo">
+  <h2>5. 精算アルゴリズムが動く順番</h2>
+  <p class="lead">
+    <code>packages/shared/src/settlement.ts</code>。単発でも月次でも、最終的にここへ来る。
+    <strong>全部が整数（円）の計算</strong>で、浮動小数点は一切使わない。
+  </p>
+
+  <ol class="flow">
+    <li>
+      <span class="title">合計を出す</span>
+      <p class="body"><code>total = Σ 各人の立て替え額</code></p>
+    </li>
+    <li>
+      <span class="title">1人あたりの基本負担を出す</span>
+      <p class="body"><code>base = floor(total / 人数)</code> — 切り捨てるので、ここで端数が余る。</p>
+    </li>
+    <li>
+      <span class="title">余った端数を配る</span>
+      <p class="body">
+        <code>remainder = total − base × 人数</code>。この端数を、
+        <strong>名前のコードユニット昇順（同名なら id 順）で先頭から1円ずつ</strong>配る。
+        <code>localeCompare</code> を使わないのは、環境の ICU データ次第で並び順が変わり、
+        誰に 1 円が乗るかがぶれてしまうため。
+      </p>
+    </li>
+    <li>
+      <span class="title">過不足を出す</span>
+      <p class="body"><code>balance = 立て替え額 − 負担額</code>。正なら受け取る側（債権者）、負なら払う側（債務者）。</p>
+    </li>
+    <li>
+      <span class="title">大きい順に突き合わせる</span>
+      <p class="body">
+        債権者は多い順、債務者は不足の大きい順に並べ、先頭どうしを
+        <code>min(受取残, 支払残)</code> で消していく。片方が 0 になったら次の人へ進む。
+        毎回どちらかが必ず 0 になるので、<strong>送金回数は最大でも「人数 − 1」回</strong>。
+      </p>
+    </li>
+  </ol>
+
+  <h3>具体例 — 3人、A だけが 1,000 円払った場合</h3>
+<pre><code>入力   A=1000, B=0, C=0
+1.  total     = 1000
+2.  base      = floor(1000 / 3) = 333
+3.  remainder = 1000 - 333×3 = 1   → 名前順の先頭 A に +1
+        負担額  A=334, B=333, C=333   （合計 1000 ぴったり）
+4.  balance   A=1000-334=+666,  B=-333,  C=-333
+5.  債権者 [A:666]、債務者 [B:333, C:333]
+        B → A  333
+        C → A  333
+    送金は 2 回（= 3人 − 1）。合計 666 は A の過剰分と厳密に一致する。</code></pre>
+  <p class="lead">
+    浮動小数点だと 333.33… の丸めで合計がずれ、「全員払ったのに 1 円合わない」が起きる。
+    それを避けるため、金額はすべて整数で持ち、DB のカラムも <code>INTEGER</code> にしている。
+  </p>
+</section>
+
+<section id="when">
+  <h2>6. どのファイルがいつ動くか（一覧）</h2>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr><th>ファイル</th><th>動く場所</th><th>動くタイミング</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>apps/web/index.html</code></td><td>ブラウザ</td><td>最初の1回。ビルド後は <code>dist/index.html</code> が配信される</td></tr>
+        <tr><td><code>apps/web/src/main.tsx</code></td><td>ブラウザ</td><td>最初の1回だけ。以降の画面遷移では再実行されない</td></tr>
+        <tr><td><code>apps/web/src/App.tsx</code></td><td>ブラウザ</td><td>URL が変わるたび。どの画面を出すかを決める</td></tr>
+        <tr><td><code>routes/*.tsx</code></td><td>ブラウザ</td><td>その URL に入ったとき、および状態が変わるたび再描画</td></tr>
+        <tr><td><code>features/*/queries.ts</code></td><td>ブラウザ</td><td>画面が「必要だ」と宣言したとき。キャッシュに無効の印が付いたときも再実行</td></tr>
+        <tr><td><code>lib/api.ts</code></td><td>ブラウザ</td><td>サーバーへ実際に出ていく直前と、返事を受けた直後</td></tr>
+        <tr><td><code>apps/api/wrangler.jsonc</code></td><td>Cloudflare</td><td>全リクエストの最初。<code>/api/*</code> を Worker に回すか SPA を返すかの分岐</td></tr>
+        <tr><td><code>apps/api/src/index.ts</code></td><td>Worker</td><td><code>/api/*</code> のリクエストごと。登録順がそのまま実行順</td></tr>
+        <tr><td><code>middleware/auth.ts</code></td><td>Worker</td><td><code>/api/health</code> 以外のすべてのリクエストで、ハンドラより先に</td></tr>
+        <tr><td><code>routes/*.ts</code>（API）</td><td>Worker</td><td>メソッドとパスが一致したとき</td></tr>
+        <tr><td><code>services/settle.ts</code></td><td>Worker</td><td>月次の締め（<code>POST /api/monthly/:ym/settle</code>）のとき</td></tr>
+        <tr><td><code>packages/shared/settlement.ts</code></td><td>Worker</td><td>イベント作成時と月次の締め時。純関数なので単体でテストできる</td></tr>
+        <tr><td><code>db/*.ts</code></td><td>Worker → D1</td><td>ルータやサービスから呼ばれたとき。SQL を書くのはここだけ</td></tr>
+        <tr><td><code>migrations/*.sql</code></td><td>D1</td><td>アプリ実行中は動かない。<code>npm run migrate:*</code> のときだけ</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="devprod">
+  <h2>7. 開発中と本番で順番が変わるところ</h2>
+  <p class="lead">同じコードでも、手元で動かすときは配信の経路が違う。ここを混同すると「本番だけ壊れる」種類の事故になる。</p>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr><th></th><th>画面（HTML / JS）</th><th>API（<code>/api/*</code>）</th><th>認証</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>本番</strong></td>
+          <td>Worker の Asset Worker が <code>apps/web/dist</code> を返す</td>
+          <td>同じ Worker の Hono</td>
+          <td>Cloudflare Access の JWT を JWKS で検証</td>
+        </tr>
+        <tr>
+          <td><strong><code>npm run dev -w @warikan/web</code></strong><br>（Vite、5173番）</td>
+          <td>Vite が <code>src</code> から直接返す。保存すると即反映</td>
+          <td>Vite の proxy が <code>localhost:8787</code> の Worker へ転送</td>
+          <td><code>.dev.vars</code> の <code>DEV_BYPASS_EMAIL</code> で JWT 検証だけ飛ばす</td>
+        </tr>
+        <tr>
+          <td><strong><code>npm run dev -w @warikan/api</code></strong><br>（wrangler、8787番）</td>
+          <td>ビルド済みの <code>dist</code> を返す。<strong>ビルドし忘れると古い画面が出る</strong></td>
+          <td>同じ Worker の Hono（本番と同じ経路）</td>
+          <td>同上</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="lead">
+    画面の見た目を最終確認するときは、必ず <code>npm run build -w @warikan/web</code> を先に走らせてから
+    <code>wrangler dev</code> を見ること。Vite の dev サーバーだけでは、
+    <code>assets</code> の振り分け（<code>run_worker_first</code>）が正しいかどうかを確かめられない。
+  </p>
+  <div class="note">
+    <strong>テストでは確かめられない順番がある</strong>
+    <code>vitest</code> は Asset Worker を再現しないため、<code>/</code> も <code>/monthly/2026-08</code> も Hono の 404 になる。
+    つまり第1章の「URL を見て振り分ける」を壊してもテストは全部通ってしまう。ここだけは <code>wrangler dev</code> を起動して手で確かめるしかない。
+  </div>
+</section>
+
+<section id="glossary">
+  <h2>8. 用語のちいさな辞書</h2>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr><th>言葉</th><th>この文書での意味</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>SPA</strong></td><td>HTML は1枚だけ読み込み、以降の画面切り替えを JavaScript で行う作り。ページ全体の再読み込みが起きない</td></tr>
+        <tr><td><strong>Asset Worker</strong></td><td>Cloudflare 側の仕組み。<code>dist</code> に置いた静的ファイルを返す係。自分のコードではない</td></tr>
+        <tr><td><strong>ミドルウェア</strong></td><td>ハンドラの前に必ず通る処理。ここでは <code>accessAuth</code>。<code>next()</code> を呼ぶと先へ進む</td></tr>
+        <tr><td><strong>ハンドラ</strong></td><td>URL とメソッドの組に対応する処理本体。<code>monthlyRoutes.get("/:ym", …)</code> の第2引数</td></tr>
+        <tr><td><strong>フック</strong></td><td><code>use</code> で始まる関数。React の描画の中から状態や通信を扱うための入口</td></tr>
+        <tr><td><strong>invalidate</strong></td><td>キャッシュに「この値は古い」と印を付けること。消すのでも上書きするのでもなく、次に必要になったとき取り直させる</td></tr>
+        <tr><td><strong>エンベロープ</strong></td><td>API の返事を包む共通の形 <code>{ ok, data }</code> / <code>{ ok, error }</code>。呼ぶ側の分岐を1か所に集められる</td></tr>
+        <tr><td><strong>スナップショット</strong></td><td>締めた時点の精算結果を JSON にして保存したもの。<code>monthly_periods.snapshot_json</code></td></tr>
+        <tr><td><strong>batch</strong></td><td>複数の SQL をまとめて原子的に実行する D1 の仕組み。途中まで書けてしまう事態を防ぐ</td></tr>
+        <tr><td><strong>純関数</strong></td><td>同じ入力なら必ず同じ出力を返し、外の世界に触れない関数。<code>calculateSettlement</code> がそれ</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<footer>
+  割り勘 (warikan) — プログラムの動作順番 / 生成日 2026-08-21<br>
+  関連: <a href="tech-stack.html">技術構成ドキュメント</a>、<code>CLAUDE.md</code>、<code>docs/superpowers/specs/</code>（設計書）
+</footer>
+
+</div>
+</body>
+</html>
