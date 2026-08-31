@@ -1,0 +1,615 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>割り勘アプリ 全体構成図</title>
+<link rel="stylesheet" href="tech-stack.css">
+<style>
+  .diagram-scroll {
+    overflow-x: auto;
+    margin-top: 20px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    padding: 8px;
+  }
+
+  svg.arch {
+    display: block;
+    width: 1200px;
+    max-width: none;
+    height: auto;
+  }
+
+  .node rect.box {
+    fill: var(--surface);
+    stroke: var(--border);
+    stroke-width: 1.6;
+    transition: stroke-width 0.12s ease, filter 0.12s ease;
+  }
+
+  .node[data-group="web"] rect.box     { stroke: var(--web); }
+  .node[data-group="worker"] rect.box  { stroke: var(--api); }
+  .node[data-group="shared"] rect.box  { stroke: var(--shared); }
+  .node[data-group="gate"] rect.box    { stroke: #cf222e; }
+  .node[data-group="db"] rect.box      { stroke: var(--accent); }
+
+  .node text {
+    fill: var(--text);
+    font-family: "Hiragino Sans", "Yu Gothic UI", "Meiryo", system-ui, sans-serif;
+    pointer-events: none;
+    user-select: none;
+  }
+
+  .node text.title { font-size: 15px; font-weight: 700; }
+  .node text.sub   { font-size: 11.5px; fill: var(--text-muted); }
+
+  .node { cursor: pointer; }
+  .node:hover rect.box { stroke-width: 2.6; }
+  .node.is-selected rect.box { stroke-width: 3.4; filter: drop-shadow(0 0 5px rgba(45,108,223,0.45)); }
+  .node.is-related rect.box { stroke-width: 2.4; }
+  .node:focus { outline: none; }
+  .node:focus rect.box { stroke-width: 3; }
+
+  .band-label {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+  }
+  .band-label.web    { fill: var(--web); }
+  .band-label.worker { fill: var(--api); }
+  .band-label.shared { fill: var(--shared); }
+  .band-label.db     { fill: var(--accent); }
+
+  .edge { fill: none; stroke: var(--text-muted); stroke-width: 1.6; }
+  .edge.dashed { stroke-dasharray: 5 4; opacity: 0.75; }
+  .edge-label {
+    font-size: 10.5px;
+    fill: var(--text-muted);
+    font-family: var(--mono);
+  }
+
+  #detail {
+    margin-top: 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 22px;
+    min-height: 120px;
+  }
+
+  #detail .placeholder { color: var(--text-muted); font-size: 0.9rem; }
+
+  .detail-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+  .detail-head h3 { margin: 0; font-size: 1.15rem; }
+  .detail-head .path { font-family: var(--mono); font-size: 0.8rem; color: var(--text-muted); }
+  .detail-head .swatch {
+    display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+    vertical-align: middle;
+  }
+  .detail-head[data-group="web"] .swatch    { background: var(--web); }
+  .detail-head[data-group="worker"] .swatch { background: var(--api); }
+  .detail-head[data-group="shared"] .swatch { background: var(--shared); }
+  .detail-head[data-group="gate"] .swatch   { background: #cf222e; }
+  .detail-head[data-group="db"] .swatch     { background: var(--accent); }
+
+  #detail p { margin: 8px 0; font-size: 0.92rem; }
+
+  .detail-files { margin: 10px 0; padding-left: 1.2em; font-size: 0.87rem; color: var(--text-muted); }
+  .detail-files li { margin-bottom: 4px; }
+  .detail-files code { color: var(--text); }
+
+  .detail-label { font-size: 0.8rem; font-weight: 700; color: var(--text-muted); margin-right: 6px; }
+
+  .detail-links { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+  .pill {
+    font: inherit;
+    font-size: 0.8rem;
+    background: var(--accent-soft);
+    color: var(--accent);
+    border: none;
+    border-radius: 999px;
+    padding: 4px 12px;
+    cursor: pointer;
+  }
+  .pill:hover { text-decoration: underline; }
+  .pill small { display: block; font-size: 0.7rem; color: var(--text-muted); text-decoration: none; margin-top: 1px; }
+
+  .deep-link {
+    display: inline-block;
+    margin-top: 14px;
+    font-size: 0.85rem;
+    color: var(--accent);
+  }
+
+  .hint {
+    margin-top: 14px;
+    font-size: 0.84rem;
+    color: var(--text-muted);
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>割り勘 (warikan) — 全体構成図</h1>
+  <p>
+    どのプログラムが・どこで動き・何をしていて・どれと繋がっているかを1枚の図にした。
+    <strong>枠をクリックすると、下に説明とつながりが表示される。</strong>
+    もっと詳しく知りたくなったら、ファイル一覧は <a href="tech-stack.html">技術構成ドキュメント</a>、
+    動く順番は <a href="program-flow.html">プログラムの動作順番</a> へ。
+  </p>
+  <div class="legend">
+    <span><span class="who browser">ブラウザ</span> apps/web/src/ — React の SPA</span>
+    <span><span class="who access">Access</span> Cloudflare の認証の関所</span>
+    <span><span class="who worker">Worker</span> apps/api/src/ — Hono の API</span>
+    <span><span class="who shared">shared</span> packages/shared/src/ — 精算ロジック</span>
+    <span><span class="who db">D1</span> Cloudflare D1 — データベース</span>
+  </div>
+</header>
+
+<section>
+  <div class="diagram-scroll">
+    <svg class="arch" viewBox="0 0 1200 1030" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--text-muted)"></path>
+        </marker>
+      </defs>
+
+      <!-- band labels -->
+      <text x="40" y="40" class="band-label web">① ブラウザ(apps/web/src/)</text>
+      <text x="250" y="392" class="band-label worker">② Cloudflare Worker(apps/api/src/)</text>
+      <text x="990" y="618" class="band-label shared">③ 精算ロジック</text>
+      <text x="270" y="892" class="band-label db">④ データベース</text>
+
+      <!-- edges (drawn first so nodes sit on top) -->
+      <g>
+        <path class="edge" marker-end="url(#arrow)" d="M190,95 L230,95"></path>
+        <path class="edge" marker-end="url(#arrow)" d="M380,95 L420,95"></path>
+        <path class="edge" marker-end="url(#arrow)" d="M590,95 L630,95"></path>
+        <path class="edge" marker-end="url(#arrow)" d="M715,130 L715,170"></path>
+        <path class="edge dashed" marker-end="url(#arrow)" d="M505,130 L505,170"></path>
+        <path class="edge" marker-end="url(#arrow)" d="M655,130 L575,170"></path>
+        <path class="edge dashed" marker-end="url(#arrow)" d="M585,110 L635,170"></path>
+
+        <path class="edge" marker-end="url(#arrow)" d="M715,240 Q660,270 620,300"></path>
+        <text class="edge-label" x="640" y="270">fetch("/api/*")</text>
+
+        <path class="edge" marker-end="url(#arrow)" d="M560,365 Q460,390 350,410"></path>
+        <text class="edge-label" x="450" y="427">それ以外の URL</text>
+
+        <path class="edge" marker-end="url(#arrow)" d="M610,370 L610,410"></path>
+        <text class="edge-label" x="616" y="392">/api/*</text>
+
+        <path class="edge dashed" marker-end="url(#arrow)" d="M900,370 Q820,392 700,405"></path>
+        <text class="edge-label" x="770" y="368">run_worker_first で振り分け</text>
+
+        <path class="edge" marker-end="url(#arrow)" d="M610,480 L615,520"></path>
+        <path class="edge" marker-end="url(#arrow)" d="M615,590 L610,630"></path>
+
+        <path class="edge dashed" marker-end="url(#arrow)" d="M700,435 L860,435"></path>
+        <path class="edge dashed" marker-end="url(#arrow)" d="M710,548 Q790,500 860,455"></path>
+
+        <path class="edge" marker-end="url(#arrow)" d="M545,710 L400,760"></path>
+        <path class="edge" marker-end="url(#arrow)" d="M610,710 L615,760"></path>
+        <path class="edge dashed" marker-end="url(#arrow)" d="M670,710 L830,760"></path>
+        <path class="edge" marker-end="url(#arrow)" d="M730,672 L990,672"></path>
+        <text class="edge-label" x="800" y="662">events.ts が計算を呼ぶ</text>
+
+        <path class="edge" marker-end="url(#arrow)" d="M520,795 L460,800"></path>
+        <path class="edge" marker-end="url(#arrow)" d="M710,790 Q850,750 990,700"></path>
+        <text class="edge-label" x="770" y="740">settle.ts が計算を呼ぶ</text>
+
+        <path class="edge" marker-end="url(#arrow)" d="M365,840 L380,900"></path>
+      </g>
+
+      <!-- ブラウザ -->
+      <g class="node" data-id="main-tsx" data-group="web" tabindex="0" role="button" aria-label="main.tsx"
+         onclick="selectNode('main-tsx')" onkeydown="if(event.key==='Enter'||event.key===' ')selectNode('main-tsx')">
+        <rect class="box" x="40" y="60" width="150" height="70" rx="9"></rect>
+        <text class="title" x="115" y="88" text-anchor="middle">main.tsx</text>
+        <text class="sub" x="115" y="106" text-anchor="middle">エントリ</text>
+      </g>
+
+      <g class="node" data-id="app-tsx" data-group="web" tabindex="0" role="button" aria-label="App.tsx"
+         onclick="selectNode('app-tsx')" onkeydown="if(event.key==='Enter'||event.key===' ')selectNode('app-tsx')">
+        <rect class="box" x="230" y="60" width="150" height="70" rx="9"></rect>
+        <text class="title" x="305" y="88" text-anchor="middle">App.tsx</text>
+        <text class="sub" x="305" y="106" text-anchor="middle">ルーティング</text>
+      </g>
+
+      <g class="node" data-id="routes-web" data-group="web" tabindex="0" role="button" aria-label="routes/"
+         onclick="selectNode('routes-web')" onkeydown="if(event.key==='Enter'||event.key===' ')selectNode('routes-web')">
+        <rect class="box" x="420" y="60" width="170" height="70" rx="9"></rect>
+        <text class="title" x="505" y="88" text-anchor="middle">routes/</text>
+        <text class="sub" x="505" y="106" text-anchor="middle">画面 (7ファイル)</text>
+      </g>
+
+      <g class="node" data-id="features-web" data-group="web" tabindex="0" role="button" aria-label="features/"
+         onclick="selectNode('features-web')" onkeydown="if(event.key==='Enter'||event.key===' ')selectNode('features-web')">
+        <rect class="box" x="630" y="60" width="170" height="70" rx="9"></rect>
+        <text class="title" x="715" y="88" text-anchor="middle">features/</text>
+        <text class="sub" x="715" y="106" text-anchor="middle">events / monthly / users</text>
+      </g>
+
+      <g class="node" data-id="components-web" data-group="web" tabindex="0" role="button" aria-label="components/"
+         onclick="selectNode('components-web')" onkeydown="if(event.key==='Enter'||event.key===' ')selectNode('components-web')">
+        <rect class="box" x="420" y="170" width="170" height="70" rx="9"></rect>
+        <text class="title" x="505" y="198" text-anchor="middle">components/</text>
+        <text class="sub" x="505" y="216" text-anchor="middle">汎用パーツ</text>
+      </g>
+
+      <g class="node" data-id="lib-web" data-group="web" tabindex="0" role="button" aria-label="lib/ (web)"
+         onclick="selectNode('lib-web')" onkeydown="if(event.key==='Enter'||event.key===' ')selectNode('lib-web')">
+        <rect class="box" x="630" y="170" width="170" height="70" rx="9"></rect>
+        <text class="title" x="715" y="198" text-anchor="middle">lib/</text>
+        <text class="sub" x="715" y="216" text-anchor="middle">通信・変換</text>
+      </g>
+
+      <!-- Access -->
+      <g class="node" data-id="access" data-group="gate" tabindex="0" role="button" aria-label="Cloudflare Access"
+         onclick="selectNode('access')" onkeydown="if(event.key==='Enter'||event.key===' ')selectNode('access')">
+        <rect class="box" x="500" y="300" width="220" height="70" rx="9"></rect>
+        <text class="title" x="610" y="328" text-anchor="middle">Cloudflare Access</text>
+        <text class="sub" x="610" y="346" text-anchor="middle">認証の関所</text>
+      </g>
+
+      <!-- Worker -->
+      <g class="node" data-id="wrangler-config" data-group="worker" tabindex="0" role="button" aria-label="wrangler.jsonc"
+         onclick="selectNode('wrangler-config')" onkeydown="if(event.key==='Enter'||event.key===' ')selectNode('wrangler-config')">
+        <rect class="box" x="860" y="300" width="180" height="70" rx="9"></rect>
+        <text class="title" x="950" y="328" text-anchor="middle">wrangler.jsonc</text>
+        <text class="sub" x="950" y="346" text-anchor="middle">振り分け設定</text>
+      </g>
+
+      <g class="node" data-id="asset-worker" data-group="worker" tabindex="0" role="button" aria-label="Asset Worker"
+         onclick="selectNode('asset-worker')" onkeydown="if(event.key==='Enter'||event.key===' ')selectNode('asset-worker')">
+        <rect class="box" x="250" y="410" width="190" height="70" rx="9"></rect>
+        <text class="title" x="345" y="438" text-anchor="middle">Asset Worker</text>
+        <text class="sub" x="345" y="456" text-anchor="middle">静的ファイルの配信</text>
+      </g>
+
+      <g class="node" data-id="index-ts" data-group="worker" tabindex="0" role="button" aria-label="index.ts"
+         onclick="selectNode('index-ts')" onkeydown="if(event.key==='Enter'||event.key===' ')selectNode('index-ts')">
+        <rect class="box" x="520" y="410" width="180" height="70" rx="9"></rect>
+        <text class="title" x="610" y="438" text-anchor="middle">index.ts</text>
+        <text class="sub" x="610" y="456" text-anchor="middle">Hono エントリ</text>
+      </g>
+
+      <g class="node" data-id="env-ts" data-group="worker" tabindex="0" role="button" aria-label="env.ts"
+         onclick="selectNode('env-ts')" onkeydown="if(event.key==='Enter'||event.key===' ')selectNode('env-ts')">
+        <rect class="box" x="860" y="410" width="150" height="60" rx="9"></rect>
+        <text class="title" x="935" y="435" text-anchor="middle">env.ts</text>
+        <text class="sub" x="935" y="452" text-anchor="middle">型定義</text>
+      </g>
+
+      <g class="node" data-id="middleware" data-group="worker" tabindex="0" role="button" aria-label="middleware/"
+         onclick="selectNode('middleware')" onkeydown="if(event.key==='Enter'||event.key===' ')selectNode('middleware')">
+        <rect class="box" x="520" y="520" width="190" height="70" rx="9"></rect>
+        <text class="title" x="615" y="548" text-anchor="middle">middleware/</text>
+        <text class="sub" x="615" y="566" text-anchor="middle">認証・エラー処理</text>
+      </g>
+
+      <g class="node" data-id="routes-api" data-group="worker" tabindex="0" role="button" aria-label="routes/ (API)"
+         onclick="selectNode('routes-api')" onkeydown="if(event.key==='Enter'||event.key===' ')selectNode('routes-api')">
+        <rect class="box" x="490" y="630" width="240" height="80" rx="9"></rect>
+        <text class="title" x="610" y="662" text-anchor="middle">routes/</text>
+        <text class="sub" x="610" y="680" text-anchor="middle">エンドポイント (5ファイル)</text>
+      </g>
+
+      <g class="node" data-id="db-api" data-group="worker" tabindex="0" role="button" aria-label="db/"
+         onclick="selectNode('db-api')" onkeydown="if(event.key==='Enter'||event.key===' ')selectNode('db-api')">
+        <rect class="box" x="270" y="760" width="190" height="80" rx="9"></rect>
+        <text class="title" x="365" y="792" text-anchor="middle">db/</text>
+        <text class="sub" x="365" y="810" text-anchor="middle">D1 アクセス層</text>
+      </g>
+
+      <g class="node" data-id="services-settle" data-group="worker" tabindex="0" role="button" aria-label="services/settle.ts"
+         onclick="selectNode('services-settle')" onkeydown="if(event.key==='Enter'||event.key===' ')selectNode('services-settle')">
+        <rect class="box" x="520" y="760" width="190" height="70" rx="9"></rect>
+        <text class="title" x="615" y="788" text-anchor="middle">services/settle.ts</text>
+        <text class="sub" x="615" y="806" text-anchor="middle">月次スナップショット</text>
+      </g>
+
+      <g class="node" data-id="lib-api" data-group="worker" tabindex="0" role="button" aria-label="lib/ (API)"
+         onclick="selectNode('lib-api')" onkeydown="if(event.key==='Enter'||event.key===' ')selectNode('lib-api')">
+        <rect class="box" x="760" y="760" width="180" height="70" rx="9"></rect>
+        <text class="title" x="850" y="788" text-anchor="middle">lib/</text>
+        <text class="sub" x="850" y="806" text-anchor="middle">封筒・ID・検証</text>
+      </g>
+
+      <!-- shared -->
+      <g class="node" data-id="shared" data-group="shared" tabindex="0" role="button" aria-label="packages/shared"
+         onclick="selectNode('shared')" onkeydown="if(event.key==='Enter'||event.key===' ')selectNode('shared')">
+        <rect class="box" x="990" y="630" width="170" height="100" rx="9"></rect>
+        <text class="title" x="1075" y="668" text-anchor="middle">packages/</text>
+        <text class="title" x="1075" y="686" text-anchor="middle">shared</text>
+        <text class="sub" x="1075" y="704" text-anchor="middle">精算アルゴリズム</text>
+      </g>
+
+      <!-- D1 -->
+      <g class="node" data-id="d1" data-group="db" tabindex="0" role="button" aria-label="Cloudflare D1"
+         onclick="selectNode('d1')" onkeydown="if(event.key==='Enter'||event.key===' ')selectNode('d1')">
+        <rect class="box" x="270" y="900" width="220" height="80" rx="9"></rect>
+        <text class="title" x="380" y="932" text-anchor="middle">Cloudflare D1</text>
+        <text class="sub" x="380" y="950" text-anchor="middle">8 テーブル (SQLite)</text>
+      </g>
+    </svg>
+  </div>
+  <p class="hint">
+    実線 = データや処理が実際に流れる向き。破線 = 型定義など補助的な参照。
+    横スクロールできる。スマホでは指でスクロールして全体を確認できる。
+  </p>
+
+  <div id="detail">
+    <p class="placeholder">↑ 図の枠をクリックすると、ここにそのプログラムの説明と、つながっている先が表示されます。</p>
+  </div>
+</section>
+
+<footer>
+  割り勘 (warikan) — 全体構成図<br>
+  関連: <a href="tech-stack.html">技術構成ドキュメント</a>(ファイル一覧・依存関係の詳細)、
+  <a href="program-flow.html">プログラムの動作順番</a>(処理が動く順を追った説明)、
+  <code>CLAUDE.md</code>
+</footer>
+
+</div>
+
+<script>
+  const CONNECTIONS = {
+    "main-tsx": [
+      { to: "app-tsx", label: "React ツリーをレンダリングする" }
+    ],
+    "app-tsx": [
+      { to: "routes-web", label: "URL に応じて画面を1つ選ぶ" }
+    ],
+    "routes-web": [
+      { to: "features-web", label: "機能コンポーネントを呼ぶ" },
+      { to: "components-web", label: "汎用パーツを直接使う画面もある" },
+      { to: "lib-web", label: "書式変換などを直接呼ぶ画面もある" }
+    ],
+    "features-web": [
+      { to: "components-web", label: "汎用パーツを組み合わせる" },
+      { to: "lib-web", label: "queries.ts が apiGet / apiSend を呼ぶ" }
+    ],
+    "components-web": [],
+    "lib-web": [
+      { to: "access", label: "fetch(\"/api/...\") でリクエストを送る" }
+    ],
+    "access": [
+      { to: "asset-worker", label: "/api/* 以外はそのまま素通し" },
+      { to: "index-ts", label: "/api/* は JWT 検証つきで Worker へ" }
+    ],
+    "wrangler-config": [
+      { to: "index-ts", label: "run_worker_first でこの振り分けを設定" },
+      { to: "asset-worker", label: "同上" }
+    ],
+    "asset-worker": [],
+    "index-ts": [
+      { to: "middleware", label: "登録順にミドルウェアを通す" }
+    ],
+    "env-ts": [],
+    "middleware": [
+      { to: "routes-api", label: "認証済みリクエストをルータへ渡す" }
+    ],
+    "routes-api": [
+      { to: "db-api", label: "D1 の読み書き" },
+      { to: "services-settle", label: "月次の締め処理を任せる" },
+      { to: "shared", label: "単発イベント作成時に精算を計算 (events.ts)" },
+      { to: "lib-api", label: "共通エンベロープで応答する" }
+    ],
+    "db-api": [
+      { to: "d1", label: "SQL を実行する" }
+    ],
+    "services-settle": [
+      { to: "db-api", label: "支出・ユーザー・カテゴリを読む" },
+      { to: "shared", label: "calculateSettlement を呼ぶ" }
+    ],
+    "lib-api": [],
+    "shared": [],
+    "d1": []
+  };
+
+  const DETAILS = {
+    "main-tsx": {
+      title: "main.tsx", group: "web", path: "apps/web/src/main.tsx",
+      summary: "アプリの本当の入口。QueryClient を作り、React を #root にマウントする。ここが走るのは最初の1回だけで、以降の画面遷移では再実行されない。",
+      files: [
+        { name: "QueryClient", desc: "staleTime: 0(金額を古いまま見せない)、retry: 1" },
+        { name: "StrictMode > QueryClientProvider > BrowserRouter > App", desc: "この順で包んで描画する" }
+      ],
+      deep: { href: "program-flow.html#boot", label: "初回アクセスの流れを見る" }
+    },
+    "app-tsx": {
+      title: "App.tsx", group: "web", path: "apps/web/src/App.tsx",
+      summary: "react-router のルート定義。現在の URL に応じて routes/ の画面を1つ選ぶ。単発イベント作成ウィザードの下書き状態を useReducer で保持しており、旧 Flask 版が Cookie に頼っていた依存を無くしている。",
+      deep: { href: "program-flow.html#boot", label: "URL 振り分けの詳細を見る" }
+    },
+    "routes-web": {
+      title: "routes/", group: "web", path: "apps/web/src/routes/",
+      summary: "1画面 = 1ファイル。7つの画面コンポーネント。隣に同名の .test.tsx を置く。",
+      files: [
+        { name: "Home.tsx", desc: "トップ。今月の合計と単発イベント履歴" },
+        { name: "MonthlyRecord.tsx", desc: "月次の支出記録 (/monthly/:ym)" },
+        { name: "MonthlyResult.tsx", desc: "月次の精算結果 (/monthly/:ym/result)" },
+        { name: "EventNew.tsx / EventInput.tsx", desc: "単発ウィザードの1・2画面目" },
+        { name: "EventDetail.tsx", desc: "単発イベントの詳細と送金チェック" },
+        { name: "Settings.tsx", desc: "表示名の編集" }
+      ],
+      deep: { href: "tech-stack.html#structure", label: "各ファイルの一覧を見る" }
+    },
+    "features-web": {
+      title: "features/", group: "web", path: "apps/web/src/features/",
+      summary: "機能ドメイン単位のフォルダ。UI コンポーネントと TanStack Query の queries.ts(useQuery / useMutation)をセットで置く。",
+      files: [
+        { name: "events/", desc: "SimpleInput / ItemsInput / wizardReducer / queries" },
+        { name: "monthly/", desc: "ExpenseForm / ExpenseList / ResultView / queries" },
+        { name: "users/", desc: "UserNameRow / queries" }
+      ],
+      deep: { href: "tech-stack.html#structure", label: "各ファイルの一覧を見る" }
+    },
+    "components-web": {
+      title: "components/", group: "web", path: "apps/web/src/components/",
+      summary: "特定の機能ドメインを持たない、画面全体で使い回す汎用パーツ。",
+      files: [
+        { name: "Button.tsx / Card.tsx", desc: "共通のボタン・カード" },
+        { name: "Toggle.tsx", desc: "2〜3択の切り替え(支払者選択など)。プルダウンより速い" },
+        { name: "AmountInput.tsx", desc: "金額入力。整数のみ、負値・小数を弾く" },
+        { name: "ErrorBanner.tsx", desc: "ApiError を人が読めるメッセージに変換して表示" }
+      ]
+    },
+    "lib-web": {
+      title: "lib/ (web)", group: "web", path: "apps/web/src/lib/",
+      summary: "サーバー通信と共通ユーティリティ。画面の中で実際に fetch を呼ぶのはここだけ。",
+      files: [
+        { name: "api.ts", desc: "fetch ラッパ。{ok,data}/{ok,error} の封筒を剥がし、失敗は ApiError にする" },
+        { name: "queryKeys.ts", desc: "TanStack Query のキーの唯一の出所。invalidate 漏れを防ぐ" },
+        { name: "types.ts", desc: "API レスポンスの型" },
+        { name: "format.ts / ym.ts / limits.ts", desc: "金額・日付の整形、年月変換、入力上限の定数" }
+      ],
+      deep: { href: "program-flow.html#boot", label: "通信の往復を追う" }
+    },
+    "access": {
+      title: "Cloudflare Access", group: "gate", path: "(Cloudflare の設定。アプリのコードではない)",
+      summary: "warikan.y-kakeibo.workers.dev というドメイン全体を保護する認証の関所。許可された2件のメールだけを通し、通過したリクエストに署名付き JWT(Cf-Access-Jwt-Assertion)を自動で付与する。未ログインならここでログイン画面が出る。",
+      deep: { href: "program-flow.html#boot", label: "関所を通る流れを見る" }
+    },
+    "wrangler-config": {
+      title: "wrangler.jsonc", group: "worker", path: "apps/api/wrangler.jsonc",
+      summary: "Worker の設定ファイル。assets.run_worker_first: [\"/api/*\"] が『/api/* は Hono が先に処理し、それ以外は Asset Worker が返す』という振り分けを決める。この1行が無いと静的ページの配信が /api/* まで飲み込んでしまう。",
+      deep: { href: "tech-stack.html#flow", label: "リクエストの経路を見る" }
+    },
+    "asset-worker": {
+      title: "Asset Worker", group: "worker", path: "(Cloudflare 組み込み機能。アプリのコードではない)",
+      summary: "apps/web/dist(Vite のビルド成果物)を配信する Cloudflare 側の仕組み。not_found_handling: \"single-page-application\" の指定により、/monthly/2026-08 のようなアプリ内 URL を直接開いても同じ index.html を返す。",
+    },
+    "index-ts": {
+      title: "index.ts", group: "worker", path: "apps/api/src/index.ts",
+      summary: "Hono アプリのエントリ。登録順がそのまま実行順になる: エラーハンドラを先に張る → /api/health だけ認証なしで通す → 以降すべてに認証ミドルウェアを噛ませる → 各ルータをマウント。",
+      deep: { href: "program-flow.html#boot", label: "登録順のコードを見る" }
+    },
+    "env-ts": {
+      title: "env.ts", group: "worker", path: "apps/api/src/env.ts",
+      summary: "Bindings(D1, ACCESS_* などの環境変数)と c.var.user の型定義。実行時の値そのものではなく、Worker 全体で使う型だけを提供する。"
+    },
+    "middleware": {
+      title: "middleware/", group: "worker", path: "apps/api/src/middleware/",
+      summary: "全リクエスト共通の前処理。ハンドラより先に必ず通る。",
+      files: [
+        { name: "auth.ts", desc: "JWT を JWKS で署名検証し、メールを取り出して users 行を解決(accessAuth)" },
+        { name: "errors.ts", desc: "例外を共通エラーエンベロープ { ok:false, error } へ変換" }
+      ],
+      deep: { href: "program-flow.html#boot", label: "認証処理の詳細を見る" }
+    },
+    "routes-api": {
+      title: "routes/ (API)", group: "worker", path: "apps/api/src/routes/",
+      summary: "HTTP の入出力と zod によるバリデーションだけを持つ層。SQL は直接書かない。",
+      files: [
+        { name: "me.ts", desc: "GET/PATCH /api/me" },
+        { name: "users.ts", desc: "GET /api/users, PATCH /api/users/:id" },
+        { name: "categories.ts", desc: "GET /api/categories" },
+        { name: "monthly.ts", desc: "月次の期間・支出・締め・結果(8本)" },
+        { name: "events.ts", desc: "単発イベントの CRUD と送金フラグ(5本)" }
+      ],
+      deep: { href: "tech-stack.html#endpoints", label: "全エンドポイント一覧を見る" }
+    },
+    "db-api": {
+      title: "db/", group: "worker", path: "apps/api/src/db/",
+      summary: "D1 への SQL を閉じ込める層。ルータやサービスから呼ばれ、SQL を書くのはここだけ。原子性が要る箇所は env.DB.batch([...]) を使う(D1 は対話的トランザクション非対応)。",
+      files: [
+        { name: "rows.ts", desc: "テーブル行の型(*Row)。DB スキーマとの唯一の接点" },
+        { name: "users.ts / categories.ts", desc: "ユーザーとカテゴリの読み書き" },
+        { name: "monthly.ts", desc: "期間・支出の読み書き。支出の増減時に is_dirty を同じ batch で立てる" },
+        { name: "events.ts", desc: "イベント・メンバー・品目・送金をまとめて batch で保存" }
+      ],
+      deep: { href: "tech-stack.html#database", label: "テーブル構造を見る" }
+    },
+    "services-settle": {
+      title: "services/settle.ts", group: "worker", path: "apps/api/src/services/settle.ts",
+      summary: "月次の精算スナップショットを組み立てる、db 層と shared の計算結果をまたぐ業務ロジック。ユーザー・支出・カテゴリを取得し、精算を計算し、カテゴリ別内訳を合成し、旧スナップショットから isPaid を引き継ぐ。",
+      deep: { href: "program-flow.html#monthly", label: "月次の締め処理を追う" }
+    },
+    "lib-api": {
+      title: "lib/ (API)", group: "worker", path: "apps/api/src/lib/",
+      summary: "外部に依存しない小物関数。",
+      files: [
+        { name: "response.ts", desc: "ok() / fail() — 共通エンベロープの生成" },
+        { name: "ids.ts", desc: "newId()(crypto.randomUUID) と nowIso()" },
+        { name: "ym.ts", desc: "\"2026-08\" ↔ {year,month} の相互変換と検証" },
+        { name: "displayName.ts", desc: "表示名の正規化(見えない文字を除去)とバリデーション" }
+      ]
+    },
+    "shared": {
+      title: "packages/shared", group: "shared", path: "packages/shared/src/",
+      summary: "DB にも HTTP にも依存しない純粋な計算層。API の routes/events.ts と services/settle.ts の両方から import される。同じ入力なら必ず同じ出力を返すので単体でテストしやすい。",
+      files: [
+        { name: "settlement.ts", desc: "computeShares(負担額と端数配分) / calculateSettlement(貪欲マッチングで送金リストを作る) / compareStr(ロケール非依存の文字列比較)" },
+        { name: "types.ts", desc: "Participant / Share / Transfer / SettlementResult" },
+        { name: "index.ts", desc: "公開 API の再エクスポート" }
+      ],
+      deep: { href: "program-flow.html#algo", label: "精算アルゴリズムの手順を見る" }
+    },
+    "d1": {
+      title: "Cloudflare D1", group: "db", path: "SQLite 方言。apps/api/migrations/*.sql で定義",
+      summary: "8テーブル: users(2名) / categories(支出カテゴリ) / monthly_periods(月次の期間と締め状態) / monthly_expenses(月次の個別支出) / events(単発イベント) / event_members / event_items / event_settlements。",
+      deep: { href: "tech-stack.html#database", label: "テーブル定義を見る" }
+    }
+  };
+
+  const REVERSE = {};
+  Object.keys(CONNECTIONS).forEach((from) => {
+    CONNECTIONS[from].forEach((c) => {
+      (REVERSE[c.to] ||= []).push(from);
+    });
+  });
+
+  function selectNode(id) {
+    const related = new Set([
+      ...(CONNECTIONS[id] || []).map((c) => c.to),
+      ...(REVERSE[id] || [])
+    ]);
+
+    document.querySelectorAll(".node").forEach((el) => {
+      el.classList.remove("is-selected", "is-related");
+      if (el.dataset.id === id) el.classList.add("is-selected");
+      else if (related.has(el.dataset.id)) el.classList.add("is-related");
+    });
+
+    renderDetail(id);
+  }
+
+  function renderDetail(id) {
+    const d = DETAILS[id];
+    const panel = document.getElementById("detail");
+    if (!d) return;
+
+    let html = `<div class="detail-head" data-group="${d.group}"><span class="swatch"></span><h3>${d.title}</h3><span class="path">${d.path}</span></div>`;
+    html += `<p>${d.summary}</p>`;
+
+    if (d.files) {
+      html += "<ul class=\"detail-files\">" +
+        d.files.map((f) => `<li><code>${f.name}</code> — ${f.desc}</li>`).join("") +
+        "</ul>";
+    }
+
+    const conns = CONNECTIONS[id] || [];
+    if (conns.length) {
+      html += "<div class=\"detail-links\"><span class=\"detail-label\">つながり:</span>" +
+        conns.map((c) => `<button class="pill" onclick="selectNode('${c.to}')">→ ${DETAILS[c.to].title}<small>${c.label}</small></button>`).join("") +
+        "</div>";
+    }
+
+    if (d.deep) {
+      html += `<a class="deep-link" href="${d.deep.href}">${d.deep.label} ↗</a>`;
+    }
+
+    panel.innerHTML = html;
+  }
+</script>
+
+</body>
+</html>

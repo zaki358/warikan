@@ -22,11 +22,12 @@
     <span class="badge">SQL (SQLite方言)</span>
   </div>
   <p class="subnav">
-    姉妹編: <a href="program-flow.html">プログラムの動作順番</a> — 起動から画面表示、入力から精算までを順を追って説明した文書。
+    姉妹編: <a href="architecture-overview.html">全体構成図</a> — クリックして各プログラムの役割を確認できる俯瞰図。
+    <a href="program-flow.html">プログラムの動作順番</a> — 起動から画面表示、入力から精算までを順を追って説明した文書。
   </p>
 </header>
 
-<section>
+<section id="lang">
   <h2>1. 使用している言語</h2>
   <div class="table-scroll">
     <table>
@@ -73,7 +74,7 @@
   </div>
 </section>
 
-<section>
+<section id="structure">
   <h2>2. フォルダ構成</h2>
   <p class="lead">
     npm workspaces で 4 パッケージ。依存の向きは <code>shared → api / web</code> の一方向のみで、
@@ -349,7 +350,7 @@
   </div>
 </section>
 
-<section>
+<section id="flow">
   <h2>3. プログラムの流れ</h2>
   <p class="lead">ここは経路の要約。<strong>どのファイルがどの順番で動くのか</strong>を1手ずつ追ったものは <a href="program-flow.html">プログラムの動作順番</a> にある。</p>
 
@@ -402,7 +403,7 @@ Cloudflare Worker（1つ）
   </p>
 </section>
 
-<section>
+<section id="endpoints">
   <h2>4. API エンドポイント</h2>
   <p class="lead"><code>/api/health</code> 以外はすべて <code>accessAuth</code> を通る。レスポンスは共通エンベロープ。</p>
   <div class="table-scroll">
@@ -435,7 +436,7 @@ Cloudflare Worker（1つ）
   </div>
 </section>
 
-<section>
+<section id="database">
   <h2>5. データベース（Cloudflare D1）</h2>
   <p class="lead">D1 は SQLite ベース。対話的トランザクション非対応のため、複数文を原子的に実行する箇所は <code>env.DB.batch([...])</code> を使う。</p>
   <div class="table-scroll">
@@ -457,7 +458,7 @@ Cloudflare Worker（1つ）
   </div>
 </section>
 
-<section>
+<section id="libraries">
   <h2>6. ライブラリとフレームワーク</h2>
 
   <h3>ランタイム依存（本番のコードに入るもの）</h3>
@@ -504,7 +505,7 @@ Cloudflare Worker（1つ）
   </div>
 </section>
 
-<section>
+<section id="tools">
   <h2>7. インストールされているツール・実行環境</h2>
   <div class="table-scroll">
     <table>
@@ -538,7 +539,7 @@ npm run typecheck                        # 全ワークスペースの型検査
 npm run test:e2e                         # Playwright（起動済み wrangler dev 前提）</code></pre>
 </section>
 
-<section>
+<section id="constraints">
   <h2>8. 設計上の制約</h2>
   <div class="table-scroll">
     <table>
