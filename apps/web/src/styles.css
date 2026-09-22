@@ -18,6 +18,12 @@
   --border: #e0e0e0;
   --radius-card: 16px;
   --radius-control: 10px;
+  /*
+    入力欄の高さ。上下 padding 12px + 行ボックス 20px + 枠線 2px の合計で、
+    タップ領域の 44px を上回る。UA 既定に任せると date と select だけが
+    内部の余白のぶん高くなり、横並びの行で下端がずれるため明示的に固定する。
+  */
+  --control-height: 46px;
 }
 
 *,
@@ -106,14 +112,47 @@ input[type="number"],
 input[type="date"],
 select {
   width: 100%;
-  /* 上下 12px + 文字 19px + 枠線 3px でタップ領域の 44px にちょうど届く。 */
+  height: var(--control-height);
   padding: 12px 14px;
   border: 1.5px solid var(--border);
   border-radius: var(--radius-control);
+  /*
+    フォントを継承しないと UA 既定が使われ、date だけ等幅・他は Arial になる。
+    欄ごとに高さが 44/45/46px とズレるうえ、date は固有幅もフォント任せになり、
+    どれだけ場所を要求するかが端末ごとに変わる。body と同じ指定に揃える。
+  */
+  font-family: inherit;
   font-size: 1rem;
+  /* --control-height の内訳の前提。1.25 × 16px = 20px。 */
+  line-height: 1.25;
   outline: none;
   background: var(--surface);
   transition: border-color 0.15s;
+}
+
+/*
+  iOS Safari は date 入力に独自の内部レイアウトを当て、値の部分が固有幅を
+  主張して枠からはみ出す。appearance を外し、値を左寄せ・余白ゼロに揃える。
+  左右の padding も詰めて、狭い端末で日付が収まるようにする（高さは
+  --control-height 側で決まるので、ここでは左右だけを上書きする）。
+*/
+input[type="date"] {
+  -webkit-appearance: none;
+  appearance: none;
+  min-width: 0;
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
+input[type="date"]::-webkit-date-and-time-value {
+  text-align: left;
+  margin: 0;
+  min-width: 0;
+}
+
+/* WebKit は値の編集部に独自の余白を入れる。これが残ると欄が 2px 高くなる。 */
+input[type="date"]::-webkit-datetime-edit {
+  padding: 0;
 }
 
 /*
@@ -135,8 +174,17 @@ button:focus-visible {
 
 .row2 {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /*
+    1fr は minmax(auto, 1fr) と同義で、列の下限が中身の min-content 幅になる。
+    WebKit の input[type="date"] は日付を表示しきる幅を最小幅として主張するため、
+    そのままだと iPhone で列が広がりカードからはみ出す。下限を 0 に固定する。
+  */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 10px;
+}
+
+.row2 > * {
+  min-width: 0;
 }
 
 /*
@@ -144,7 +192,28 @@ button:focus-visible {
   半々にするとスマホ幅で名前が数文字で切れ、誰を選んでいるか分からなくなる。
 */
 .row2-amount-payer {
-  grid-template-columns: 1fr 1.6fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr);
+}
+
+/*
+  金額は4〜5桁で収まるが、日付は常に 2026/09/22 の10文字を表示する。
+  半々にすると狭い端末で日付側だけ足りなくなるので、日付を少し広く取る。
+*/
+.row2-amount-date {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
+}
+
+/*
+  320px 級の端末（iPhone SE 第1世代など）だと日付列が 130px を切り、
+  枠には収まるものの末尾の数字がカレンダーアイコンに潰される。
+  その幅では横並びを諦めて、日付に1行まるごと使わせる。
+  欠け始めるのは実測 327px あたりだが、iOS の文字サイズを上げると日付は
+  さらに幅を要求するため、360px まで余裕を持たせて切り替える。
+*/
+@media (max-width: 360px) {
+  .row2-amount-date {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .actions {
@@ -222,7 +291,8 @@ button:focus-visible {
 .btn-sm {
   display: inline-block;
   width: auto;
-  min-height: 44px;
+  /* 参加者行などで入力欄と横に並ぶので、欄と同じ高さに揃える。 */
+  min-height: var(--control-height);
   padding: 6px 14px;
   font-size: 0.85rem;
   border-radius: 8px;

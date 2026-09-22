@@ -79,7 +79,7 @@ export function ExpenseForm({
         />
       </div>
 
-      <div className="row2">
+      <div className="row2 row2-amount-date">
         <div className="form-group">
           <label htmlFor="amount">金額</label>
           <AmountInput id="amount" value={amount} onChange={setAmount} placeholder="1200" />
