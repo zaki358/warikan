@@ -18,7 +18,7 @@ import type { MonthlyExpenseRow, MonthlyPeriodRow } from "../db/rows.js";
 import { findUserById } from "../db/users.js";
 import type { AppEnv } from "../env.js";
 import { fail, ok } from "../lib/response.js";
-import { daysInMonth, formatYm, parseYm } from "../lib/ym.js";
+import { formatYm, parseYm, spentOnInPeriod } from "../lib/ym.js";
 import { buildSnapshot, mergeIsPaid, readSnapshot } from "../services/settle.js";
 
 export const monthlyRoutes = new Hono<AppEnv>();
@@ -67,13 +67,6 @@ const expenseSchema = z.object({
 });
 
 type ExpensePayload = z.infer<typeof expenseSchema>;
-
-/** spentOn がその年月の実在する日付かを確認する。 */
-function spentOnInPeriod(spentOn: string, year: number, month: number): boolean {
-  const [y, m, d] = spentOn.split("-").map(Number);
-  if (y !== year || m !== month) return false;
-  return d !== undefined && d >= 1 && d <= daysInMonth(year, month);
-}
 
 /** 支払者とカテゴリの実在を確認する。問題があればエラーメッセージを返す。 */
 async function validateRefs(

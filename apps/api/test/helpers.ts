@@ -4,6 +4,7 @@ import app from "../src/index.js";
 
 export const ALLOWED_EMAIL = "me@example.com";
 export const PARTNER_EMAIL = "partner@example.com";
+export const INTERNAL_TOKEN = "test-internal-token";
 
 const BASE = "https://warikan.test";
 
@@ -41,6 +42,31 @@ export async function anonFetch(path: string, init: RequestInit = {}): Promise<R
   return fetchWithEnv(path, init, undefined);
 }
 
+/**
+ * 内部API（Service Binding 経由相当）へのリクエスト。
+ *
+ * Access の JWT も DEV_BYPASS_EMAIL も付けない。認証は X-Internal-Token だけで通る。
+ * `token` に null を渡すとヘッダ自体を付けず、`configuredToken` に null を渡すと
+ * Worker 側が INTERNAL_API_TOKEN 未設定（連携無効）の状態を再現できる。
+ * undefined ではなく null をセンチネルにしているのは、undefined だとデフォルト引数が
+ * 効いてしまい「未設定」を表現できないため。
+ */
+export async function internalFetch(
+  path: string,
+  init: RequestInit = {},
+  token: string | null = INTERNAL_TOKEN,
+  configuredToken: string | null = INTERNAL_TOKEN,
+): Promise<Response> {
+  const headers = new Headers(init.headers);
+  if (token !== null) headers.set("X-Internal-Token", token);
+
+  return app.fetch(new Request(`${BASE}${path}`, { ...init, headers }), {
+    ...env,
+    DEV_BYPASS_EMAIL: undefined,
+    INTERNAL_API_TOKEN: configuredToken ?? undefined,
+  });
+}
+
 export async function jsonBody<T>(res: Response): Promise<T> {
   return (await res.json()) as T;
 }
@@ -62,5 +88,8 @@ export async function resetDb(): Promise<void> {
     env.DB.prepare("DELETE FROM monthly_expenses"),
     env.DB.prepare("DELETE FROM monthly_periods"),
     env.DB.prepare("DELETE FROM users"),
+    // 内部API経由で自動作成されたカテゴリ（sort_order = 900）だけを消す。
+    // seed の7個（sort_order 10〜99）はマイグレーション由来なので残す。
+    env.DB.prepare("DELETE FROM categories WHERE sort_order >= 900"),
   ]);
 }

@@ -33,6 +33,8 @@ export type MonthlyExpenseRow = {
   spent_on: string;
   created_at: string;
   updated_at: string;
+  /** 外部アプリ由来の支出の由来キー。割り勘アプリ内で手入力した支出は null。 */
+  external_ref: string | null;
 };
 
 export type EventRow = {
