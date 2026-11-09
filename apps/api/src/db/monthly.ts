@@ -58,10 +58,23 @@ export type ExpenseInput = {
   itemName: string;
   categoryId: number | null;
   spentOn: string;
+  /** 外部アプリ由来の支出の由来キー。割り勘アプリ内の手入力では省略する（null）。 */
+  externalRef?: string | null;
 };
 
 export async function findExpenseById(db: D1Database, id: string): Promise<MonthlyExpenseRow | null> {
   return db.prepare("SELECT * FROM monthly_expenses WHERE id = ?").bind(id).first<MonthlyExpenseRow>();
+}
+
+/** 外部アプリ由来の支出を由来キーで引く。二重反映の判定に使う。 */
+export async function findExpenseByExternalRef(
+  db: D1Database,
+  externalRef: string,
+): Promise<MonthlyExpenseRow | null> {
+  return db
+    .prepare("SELECT * FROM monthly_expenses WHERE external_ref = ?")
+    .bind(externalRef)
+    .first<MonthlyExpenseRow>();
 }
 
 /**
@@ -85,14 +98,15 @@ export async function insertExpense(db: D1Database, input: ExpenseInput): Promis
     spent_on: input.spentOn,
     created_at: timestamp,
     updated_at: timestamp,
+    external_ref: input.externalRef ?? null,
   };
 
   await db.batch([
     db
       .prepare(
         `INSERT INTO monthly_expenses
-           (id, period_id, paid_by, amount, item_name, category_id, spent_on, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (id, period_id, paid_by, amount, item_name, category_id, spent_on, created_at, updated_at, external_ref)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         row.id,
@@ -104,6 +118,7 @@ export async function insertExpense(db: D1Database, input: ExpenseInput): Promis
         row.spent_on,
         row.created_at,
         row.updated_at,
+        row.external_ref,
       ),
     markDirtyStatement(db, input.periodId),
   ]);

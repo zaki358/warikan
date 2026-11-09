@@ -5,3 +5,7 @@ DEV_BYPASS_EMAIL="me@example.com"
 ACCESS_ALLOWED_EMAILS="me@example.com,partner@example.com"
 ACCESS_TEAM_DOMAIN="example.cloudflareaccess.com"
 ACCESS_AUD="local-dev"
+# 家計簿ダッシュボードからの Service Binding 経由の呼び出しを認証する共有トークン。
+# 本番は `wrangler secret put INTERNAL_API_TOKEN` で登録する（値は家計簿Workerの
+# WARIKAN_INTERNAL_TOKEN と一致させる）。未設定なら /api/internal/* は 403 で閉じる。
+INTERNAL_API_TOKEN="local-dev-internal-token"
